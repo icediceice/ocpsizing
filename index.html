@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@^3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -28,6 +29,13 @@
             border-left: 4px solid #6366f1;
             padding: 1rem;
             border-radius: 0.5rem;
+        }
+        .raid-info-box {
+            background-color: #f0fdf4;
+            border-left: 4px solid #22c55e;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
         }
     </style>
 </head>
@@ -74,12 +82,12 @@
                         </div>
                          <div class="pt-4 border-t divide-y divide-gray-200">
                              <label class="flex items-center py-2">
-                                <input type="checkbox" id="compact-cluster-checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                                <span class="ml-2 text-sm text-gray-900 font-medium">Combine Control Plane & Worker Nodes</span>
+                                 <input type="checkbox" id="compact-cluster-checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                 <span class="ml-2 text-sm text-gray-900 font-medium">Combine Control Plane & Worker Nodes</span>
                             </label>
-                            <label class="flex items-center py-2">
-                                <input type="checkbox" id="failover-checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                                <span class="ml-2 text-sm text-gray-900 font-medium">Add N+1 Failover Node</span>
+                             <label class="flex items-center py-2">
+                                 <input type="checkbox" id="failover-checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                 <span class="ml-2 text-sm text-gray-900 font-medium">Add N+1 Failover Node</span>
                             </label>
                         </div>
                     </div>
@@ -87,27 +95,45 @@
 
                 <!-- Storage Specification -->
                 <div class="card lg:col-span-1">
-                    <h2 class="text-2xl font-semibold text-gray-700 mb-4 border-b pb-2">Storage Specs (Optional)</h2>
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-4 border-b pb-2">Storage & RAID Config</h2>
                     <div class="space-y-4">
                          <div>
-                            <label for="totalStorage" class="block text-sm font-medium text-gray-700">Total Storage Required (GB)</label>
+                            <label for="totalStorage" class="block text-sm font-medium text-gray-700">Total Usable Storage Required (GB)</label>
                             <input type="number" id="totalStorage" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                         </div>
                         <div>
                             <label for="totalIops" class="block text-sm font-medium text-gray-700">Total IOPS Required</label>
                             <input type="number" id="totalIops" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                         </div>
-                         <div class="pt-4 border-t">
-                             <h3 class="text-lg font-medium text-gray-800">Storage Provider</h3>
-                             <p class="text-xs text-gray-500 mb-2">Performance of a single storage disk or node.</p>
-                             <div class="mt-2">
-                                <label for="capacityPerDisk" class="block text-sm font-medium text-gray-700">Capacity per Disk/Node (GB)</label>
-                                <input type="number" id="capacityPerDisk" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <div class="pt-4 border-t">
+                             <h3 class="text-lg font-medium text-gray-800">Single Node/Array Config</h3>
+                             <p class="text-xs text-gray-500 mb-2">Configure a single storage unit below.</p>
+                             <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="capacityPerDisk" class="block text-sm font-medium text-gray-700">Capacity/Disk (GB)</label>
+                                    <input type="number" id="capacityPerDisk" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                </div>
+                                <div>
+                                    <label for="iopsPerDisk" class="block text-sm font-medium text-gray-700">IOPS/Disk</label>
+                                    <input type="number" id="iopsPerDisk" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                </div>
+                                <div>
+                                     <label for="disksInArray" class="block text-sm font-medium text-gray-700">Disks in Array</label>
+                                     <input type="number" id="disksInArray" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                </div>
+                                <div>
+                                    <label for="raidLevel" class="block text-sm font-medium text-gray-700">RAID Level</label>
+                                    <select id="raidLevel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <option value="none">None</option>
+                                        <option value="0">RAID 0</option>
+                                        <option value="1">RAID 1</option>
+                                        <option value="5">RAID 5</option>
+                                        <option value="6">RAID 6</option>
+                                        <option value="10">RAID 10</option>
+                                    </select>
+                                </div>
                             </div>
-                             <div class="mt-4">
-                                <label for="iopsPerDisk" class="block text-sm font-medium text-gray-700">IOPS per Disk/Node</label>
-                                <input type="number" id="iopsPerDisk" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                            </div>
+                            <div id="raid-results-display" class="mt-4"></div>
                         </div>
                     </div>
                 </div>
@@ -149,9 +175,12 @@
                     <button id="save-excel-btn" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
                         Save to Excel
                     </button>
-                 </div>
+                </div>
                  <div id="workload-summary-details" class="mb-6"></div>
                  <div id="results-content" class="grid md:grid-cols-2 gap-8"></div>
+                 <div id="recommendation-details" class="mt-6"></div>
+                 <div id="growth-recommendation-details" class="mt-6"></div>
+                 <!-- FIX: Added the missing graph-details div below -->
                  <div id="graph-details" class="mt-6"></div>
                  <div id="growth-graph-details" class="mt-6"></div>
                  <div id="overhead-details" class="mt-6"></div>
@@ -161,15 +190,18 @@
     </div>
 
     <script>
+        // --- DOM Element Selectors ---
         const workloadList = document.getElementById('workload-list');
         const addWorkloadBtn = document.getElementById('add-workload-btn');
         let workloadId = 0;
         let cpuChart = null;
         let memChart = null;
-        let growthCpuChart = null;
-        let growthMemChart = null;
+        let utilizationGrowthChart = null;
         let excelData = {}; // Global object to store calculation data for Excel export
 
+        /**
+         * Creates a new workload entry form and appends it to the list.
+         */
         function createWorkloadEntry() {
             workloadId++;
             const entryDiv = document.createElement('div');
@@ -197,22 +229,109 @@
             workloadList.appendChild(entryDiv);
         }
         
-        createWorkloadEntry();
-        
+        // --- Initial Setup and Event Listeners ---
+        createWorkloadEntry(); // Add one workload entry by default
         addWorkloadBtn.addEventListener('click', createWorkloadEntry);
 
+        // Event delegation for removing workload entries
         workloadList.addEventListener('click', function(e) {
             if (e.target.classList.contains('remove-workload-btn')) {
                 e.target.closest('.workload-entry').remove();
             }
         });
 
+        // Toggle visibility of growth projection inputs
         document.getElementById('growth-checkbox').addEventListener('change', function() {
             document.getElementById('growth-inputs').classList.toggle('hidden', !this.checked);
         });
 
+        /**
+         * Updates the RAID calculation display in real-time based on user input.
+         * Calculates usable capacity, fault tolerance, and validates disk requirements.
+         */
+        function updateRAIDCalculation() {
+            const raidLevel = document.getElementById('raidLevel').value;
+            const numDisks = parseInt(document.getElementById('disksInArray').value) || 0;
+            const capacityPerDisk = parseInt(document.getElementById('capacityPerDisk').value) || 0;
+            const displayDiv = document.getElementById('raid-results-display');
+
+            if (raidLevel === 'none' || numDisks === 0 || capacityPerDisk === 0) {
+                displayDiv.innerHTML = ''; // Clear display if inputs are incomplete
+                return;
+            }
+
+            let usableCapacity = 0;
+            let faultTolerance = 'None';
+            let minDisks = 0;
+            let errorMsg = '';
+
+            // Calculate RAID parameters based on the selected level
+            switch(raidLevel) {
+                case '0':
+                    minDisks = 2;
+                    if (numDisks < minDisks) errorMsg = `RAID 0 requires at least ${minDisks} disks.`;
+                    usableCapacity = numDisks * capacityPerDisk;
+                    faultTolerance = '0 disks';
+                    break;
+                case '1':
+                    minDisks = 2;
+                    if (numDisks < minDisks || numDisks % 2 !== 0) errorMsg = `RAID 1 requires an even number of disks (min ${minDisks}).`;
+                    usableCapacity = (numDisks / 2) * capacityPerDisk;
+                    faultTolerance = '1 disk per mirror set';
+                    break;
+                case '5':
+                    minDisks = 3;
+                    if (numDisks < minDisks) errorMsg = `RAID 5 requires at least ${minDisks} disks.`;
+                    usableCapacity = (numDisks - 1) * capacityPerDisk;
+                    faultTolerance = '1 disk';
+                    break;
+                case '6':
+                    minDisks = 4;
+                    if (numDisks < minDisks) errorMsg = `RAID 6 requires at least ${minDisks} disks.`;
+                    usableCapacity = (numDisks - 2) * capacityPerDisk;
+                    faultTolerance = '2 disks';
+                    break;
+                case '10':
+                    minDisks = 4;
+                     if (numDisks < minDisks || numDisks % 2 !== 0) errorMsg = `RAID 10 requires an even number of disks (min ${minDisks}).`;
+                    usableCapacity = (numDisks / 2) * capacityPerDisk;
+                    faultTolerance = '1 disk per sub-array';
+                    break;
+            }
+            
+            // Display error or results
+            if (errorMsg) {
+                displayDiv.innerHTML = `<p class="text-sm font-medium text-red-600">${errorMsg}</p>`;
+            } else {
+                 displayDiv.innerHTML = `
+                    <div class="raid-info-box">
+                        <h4 class="font-semibold text-gray-800">RAID Array Summary:</h4>
+                        <ul class="list-disc list-inside text-sm text-gray-600 mt-2 space-y-1">
+                             <li>Usable Capacity: <span class="font-bold text-green-700">${usableCapacity.toFixed(1)} GB</span></li>
+                             <li>Fault Tolerance: <span class="font-semibold">${faultTolerance}</span></li>
+                        </ul>
+                    </div>
+                `;
+            }
+        }
+
+        // Add event listeners to all RAID input fields for real-time calculation
+        const raidInputs = ['raidLevel', 'disksInArray', 'capacityPerDisk'];
+        raidInputs.forEach(id => {
+            document.getElementById(id).addEventListener('input', updateRAIDCalculation);
+        });
+        
+        // Initial call to set up the RAID calculator display if there are default values
+        updateRAIDCalculation();
+
+        /**
+         * Main calculation function triggered on button click.
+         * Gathers all inputs, performs sizing calculations, and displays results.
+         */
         document.getElementById('calculateBtn').addEventListener('click', function() {
-            excelData = { inputs: [], results: {} }; // Reset excel data
+            excelData = { inputs: [], results: {} }; // Reset excel data object
+            
+            // --- 1. Gather All Input Values ---
             let initialAppWorkloadVcpu = 0;
             let initialAppWorkloadMem = 0;
             document.querySelectorAll('.workload-entry').forEach(entry => {
@@ -225,108 +344,94 @@
                 excelData.inputs.push({ Type: 'Workload', Name: name, Instances: instances, 'vCPU/Instance': vcpu, 'Memory/Instance (GB)': mem });
             });
             
+            // Node specifications
             const physicalCpuPerServer = parseInt(document.getElementById('physicalCpuPerServer').value) || 0;
             const cpuConversionRatio = parseFloat(document.getElementById('cpuConversionRatio').value) || 1;
             const memPerServer = parseInt(document.getElementById('memPerServer').value) || 0;
             const maxUtilization = (parseInt(document.getElementById('maxUtilization').value) || 100);
             const isCompactCluster = document.getElementById('compact-cluster-checkbox').checked;
             const addFailoverNode = document.getElementById('failover-checkbox').checked;
+
+            // Growth projections
             const enableGrowth = document.getElementById('growth-checkbox').checked;
-            
             const growthPercentage = parseInt(document.getElementById('growthPercentage').value) || 0;
             const forecastPeriod = parseInt(document.getElementById('forecastPeriod').value) || 0;
 
+            // Storage specifications
             const totalStorage = parseInt(document.getElementById('totalStorage').value) || 0;
             const totalIops = parseInt(document.getElementById('totalIops').value) || 0;
             const capacityPerDisk = parseInt(document.getElementById('capacityPerDisk').value) || 0;
             const iopsPerDisk = parseInt(document.getElementById('iopsPerDisk').value) || 0;
+            const disksInArray = parseInt(document.getElementById('disksInArray').value) || 0;
+            const raidLevel = document.getElementById('raidLevel').value;
             
+            // Store inputs for Excel export
             excelData.inputs.push({Type: 'Node Specs', Name: 'Physical CPUs', Value: physicalCpuPerServer});
             excelData.inputs.push({Type: 'Node Specs', Name: 'CPU to vCPU Ratio', Value: cpuConversionRatio});
             excelData.inputs.push({Type: 'Node Specs', Name: 'Memory (GB)', Value: memPerServer});
             excelData.inputs.push({Type: 'Node Specs', Name: 'Max Utilization %', Value: maxUtilization});
-            excelData.inputs.push({Type: 'Node Specs', Name: 'Compact Cluster', Value: isCompactCluster ? 'Yes' : 'No'});
+            excelData.inputs.push({Type: 'Node Specs', Name: 'Combined (Control+Worker) Cluster', Value: isCompactCluster ? 'Yes' : 'No'});
             excelData.inputs.push({Type: 'Node Specs', Name: 'N+1 Failover', Value: addFailoverNode ? 'Yes' : 'No'});
-            // ... (rest of excel input saving)
 
+            // --- 2. Clear Previous Results and Validate Inputs ---
             const resultsDiv = document.getElementById('results');
-            const resultsContent = document.getElementById('results-content');
-            const workloadSummaryDiv = document.getElementById('workload-summary-details');
-            const graphDetailsDiv = document.getElementById('graph-details');
-            const growthGraphDetailsDiv = document.getElementById('growth-graph-details');
-            const overheadDetailsDiv = document.getElementById('overhead-details');
             const errorDiv = document.getElementById('error');
-            
-            // --- Clear previous results ---
-            resultsContent.innerHTML = '';
-            workloadSummaryDiv.innerHTML = '';
-            graphDetailsDiv.innerHTML = '';
-            growthGraphDetailsDiv.innerHTML = '';
-            overheadDetailsDiv.innerHTML = '';
+            ['results-content', 'workload-summary-details', 'graph-details', 'growth-graph-details', 'overhead-details', 'recommendation-details', 'growth-recommendation-details'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = '';
+            });
             errorDiv.textContent = '';
             resultsDiv.classList.add('hidden');
 
-             if (physicalCpuPerServer <= 0 || memPerServer <= 0 || cpuConversionRatio <= 0 || maxUtilization <= 0 || maxUtilization > 100) {
+            if (physicalCpuPerServer <= 0 || memPerServer <= 0 || cpuConversionRatio <= 0 || maxUtilization <= 0 || maxUtilization > 100) {
                 errorDiv.textContent = 'Physical CPUs, Memory, Ratio, and Utilization must be valid positive numbers. Utilization cannot exceed 100%.';
                 resultsDiv.classList.remove('hidden');
                 return;
             }
             
-            // --- Control Plane resources ---
+            // --- 3. Calculate Workload Requirements ---
+            // Control Plane base requirements
             const cpNodeCount = 3;
             const cpVcpuPerNode = 8;
             const cpMemPerNode = 16;
             const cpTotalVcpu = cpNodeCount * cpVcpuPerNode;
             const cpTotalMem = cpNodeCount * cpMemPerNode;
 
-            // --- Aggregate total workload (Apps + CP if compact) ---
+            // Aggregate total workload (Apps + CP if compact)
             let initialWorkloadVcpu = initialAppWorkloadVcpu;
             let initialWorkloadMem = initialAppWorkloadMem;
-
             if (isCompactCluster) {
                 initialWorkloadVcpu += cpTotalVcpu;
                 initialWorkloadMem += cpTotalMem;
             }
 
-            // --- Growth Calculation on total initial workload ---
+            // Apply growth projection to get the final (end of forecast) workload
             let finalWorkloadVcpu = initialWorkloadVcpu;
             let finalWorkloadMem = initialWorkloadMem;
             let monthlyGrowthRate = 0;
-
             if (enableGrowth && forecastPeriod > 0 && growthPercentage > 0) {
                 monthlyGrowthRate = (growthPercentage / 100) / 12;
                 finalWorkloadVcpu = initialWorkloadVcpu * Math.pow(1 + monthlyGrowthRate, forecastPeriod);
                 finalWorkloadMem = initialWorkloadMem * Math.pow(1 + monthlyGrowthRate, forecastPeriod);
             }
 
-            const totalAvailableVcpu = physicalCpuPerServer * cpuConversionRatio;
-
-            workloadSummaryDiv.innerHTML = `
+            // Display workload summary
+            document.getElementById('workload-summary-details').innerHTML = `
                 <div class="bg-white p-4 rounded-lg shadow-sm border">
                     <h3 class="text-lg font-semibold text-gray-800 mb-2">Total Aggregated Workload</h3>
                     <div class="grid grid-cols-2 gap-4 text-center">
-                        <div>
-                            <p class="text-sm text-gray-500">Current vCPU Required</p>
-                            <p class="text-xl font-bold text-indigo-600">${initialWorkloadVcpu.toFixed(2)}</p>
-                        </div>
-                        <div>
-                            <p class="text-sm text-gray-500">Current Memory Required</p>
-                            <p class="text-xl font-bold text-indigo-600">${initialWorkloadMem.toFixed(2)} <span class="text-base font-medium">GB</span></p>
-                        </div>
-                         ${enableGrowth ? `
-                        <div>
-                            <p class="text-sm text-gray-500">Projected vCPU (${forecastPeriod} Mo)</p>
-                            <p class="text-xl font-bold text-purple-600">${finalWorkloadVcpu.toFixed(2)}</p>
-                        </div>
-                        <div>
-                            <p class="text-sm text-gray-500">Projected Memory (${forecastPeriod} Mo)</p>
-                            <p class="text-xl font-bold text-purple-600">${finalWorkloadMem.toFixed(2)} <span class="text-base font-medium">GB</span></p>
-                        </div>
+                        <div><p class="text-sm text-gray-500">Current vCPU Required</p><p class="text-xl font-bold text-indigo-600">${initialWorkloadVcpu.toFixed(2)}</p></div>
+                        <div><p class="text-sm text-gray-500">Current Memory Required</p><p class="text-xl font-bold text-indigo-600">${initialWorkloadMem.toFixed(2)} <span class="text-base font-medium">GB</span></p></div>
+                        ${enableGrowth && forecastPeriod > 0 ? `
+                        <div><p class="text-sm text-gray-500">Projected vCPU (${forecastPeriod} Mo)</p><p class="text-xl font-bold text-purple-600">${finalWorkloadVcpu.toFixed(2)}</p></div>
+                        <div><p class="text-sm text-gray-500">Projected Memory (${forecastPeriod} Mo)</p><p class="text-xl font-bold text-purple-600">${finalWorkloadMem.toFixed(2)} <span class="text-base font-medium">GB</span></p></div>
                         ` : ''}
                     </div>
-                </div>
-            `;
+                </div>`;
 
+            // --- 4. Calculate Allocatable Node Resources ---
+            const totalAvailableVcpu = physicalCpuPerServer * cpuConversionRatio;
+            
             function calculateOverhead(vcpu, mem) {
                 let reservedVcpu = (vcpu <= 2) ? 0.5 : (vcpu <= 4) ? 1 : (vcpu <= 8) ? 1.5 : (vcpu <= 16) ? 2 : 2.5;
                 let reservedMem = (mem <= 4) ? 1 : (mem <= 8) ? 1.5 : (mem <= 16) ? 2.5 : (mem <= 32) ? 3.5 : (mem <= 64) ? 4.5 : 6;
@@ -345,99 +450,77 @@
                  resultsDiv.classList.remove('hidden');
                  return;
             }
-
+            
+            // --- 5. Calculate Required Number of Nodes (Compute and Storage) ---
             let resultsHTML = '';
             let workerNodes = 0;
             
+            // Compute nodes based on the FINAL projected workload
             if (isCompactCluster) {
                 const compactNodesByCpu = Math.ceil(finalWorkloadVcpu / allocatableVcpuPerServer);
                 const compactNodesByMem = Math.ceil(finalWorkloadMem / allocatableMemPerServer);
-                let compactNodes = Math.max(3, compactNodesByCpu, compactNodesByMem); // Minimum 3 for HA compact cluster
-                 if (addFailoverNode) {
-                    compactNodes += 1;
-                }
+                let compactNodes = Math.max(3, compactNodesByCpu, compactNodesByMem);
+                if (addFailoverNode) compactNodes += 1;
                 const failoverText = addFailoverNode ? `<span class="text-xs font-medium text-green-700">(N+1 Redundancy)</span>` : '';
-                resultsHTML = `
-                    <div class="md:col-span-2">
-                        <h3 class="text-lg font-medium text-gray-900">Compact Cluster</h3>
-                        <div class="mt-2 text-gray-600">
-                            <p class="text-2xl font-bold text-indigo-600">${compactNodes} <span class="text-lg font-medium text-gray-800">nodes</span> ${failoverText}</p>
-                            <p class="mt-2 text-sm">To support the combined control plane and ${enableGrowth ? 'projected' : 'current'} application workload.</p>
-                        </div>
-                    </div>`;
-                workerNodes = compactNodes; // for graph calculation
+                resultsHTML = `<div class="md:col-span-2"><h3 class="text-lg font-medium text-gray-900">Combined (Control+Worker) Cluster</h3><div class="mt-2 text-gray-600"><p class="text-2xl font-bold text-indigo-600">${compactNodes} <span class="text-lg font-medium text-gray-800">nodes</span> ${failoverText}</p><p class="mt-2 text-sm">To support the combined control plane and ${enableGrowth ? 'projected' : 'current'} application workload.</p></div></div>`;
+                workerNodes = compactNodes;
             } else {
                 const workerNodesByCpu = Math.ceil(finalWorkloadVcpu / allocatableVcpuPerServer);
                 const workerNodesByMem = Math.ceil(finalWorkloadMem / allocatableMemPerServer);
                 let calculatedWorkerNodes = Math.max(2, workerNodesByCpu, workerNodesByMem);
-                if (addFailoverNode) {
-                    calculatedWorkerNodes += 1;
-                }
+                if (addFailoverNode) calculatedWorkerNodes += 1;
                 const failoverText = addFailoverNode ? `<span class="text-xs font-medium text-green-700">(N+1 Redundancy)</span>` : '';
-                resultsHTML = `
-                    <div>
-                        <h3 class="text-lg font-medium text-gray-900">Control Plane</h3>
-                        <div class="mt-2 text-gray-600">
-                            <p class="text-2xl font-bold text-indigo-600">${cpNodeCount} <span class="text-lg font-medium text-gray-800">nodes</span></p>
-                            <p class="mt-2 text-sm">${cpVcpuPerNode} vCPU & ${cpMemPerNode} GB Memory per node</p>
-                        </div>
-                    </div>
-                    <div>
-                        <h3 class="text-lg font-medium text-gray-900">Worker Nodes</h3>
-                         <div class="mt-2 text-gray-600">
-                            <p class="text-2xl font-bold text-indigo-600">${calculatedWorkerNodes} <span class="text-lg font-medium text-gray-800">nodes</span> ${failoverText}</p>
-                            <p class="mt-2 text-sm">To support the ${enableGrowth ? 'projected' : 'current'} application workload</p>
-                        </div>
-                    </div>`;
-                workerNodes = calculatedWorkerNodes; // for graph calculation
+                resultsHTML = `<div><h3 class="text-lg font-medium text-gray-900">Control Plane</h3><div class="mt-2 text-gray-600"><p class="text-2xl font-bold text-indigo-600">${cpNodeCount} <span class="text-lg font-medium text-gray-800">nodes</span></p><p class="mt-2 text-sm">${cpVcpuPerNode} vCPU & ${cpMemPerNode} GB Memory per node</p></div></div><div><h3 class="text-lg font-medium text-gray-900">Worker Nodes</h3><div class="mt-2 text-gray-600"><p class="text-2xl font-bold text-indigo-600">${calculatedWorkerNodes} <span class="text-lg font-medium text-gray-800">nodes</span> ${failoverText}</p><p class="mt-2 text-sm">To support the ${enableGrowth ? 'projected' : 'current'} application workload</p></div></div>`;
+                workerNodes = calculatedWorkerNodes;
             }
             
-            let requiredStorageUnits = 0;
+            // Storage nodes
             const calculateStorage = totalStorage > 0 || totalIops > 0;
-
             if (calculateStorage) {
-                if (iopsPerDisk <= 0 || capacityPerDisk <=0) {
-                     errorDiv.textContent = 'To calculate storage, provider IOPS and Capacity must be greater than zero.';
+                let usableCapacityPerArray = 0;
+                let iopsPerArray = iopsPerDisk * disksInArray;
+                switch(raidLevel) {
+                    case '0': usableCapacityPerArray = disksInArray * capacityPerDisk; break;
+                    case '1': usableCapacityPerArray = (disksInArray / 2) * capacityPerDisk; break;
+                    case '5': usableCapacityPerArray = (disksInArray - 1) * capacityPerDisk; break;
+                    case '6': usableCapacityPerArray = (disksInArray - 2) * capacityPerDisk; break;
+                    case '10': usableCapacityPerArray = (disksInArray / 2) * capacityPerDisk; break;
+                    default: usableCapacityPerArray = disksInArray * capacityPerDisk; break;
+                }
+                if (disksInArray <= 0 || capacityPerDisk <=0) {
+                     errorDiv.textContent = 'To calculate storage, Disks in Array and Capacity per Disk must be greater than zero.';
                      resultsDiv.classList.remove('hidden');
                      return;
                 }
-                const storageNodesByIops = Math.ceil(totalIops / iopsPerDisk);
-                const storageNodesByCapacity = Math.ceil(totalStorage / capacityPerDisk);
-                requiredStorageUnits = Math.max(3, storageNodesByIops, storageNodesByCapacity);
-                resultsHTML += `
-                 <div>
-                    <h3 class="text-lg font-medium text-gray-900">Storage</h3>
-                     <div class="mt-2 text-gray-600">
-                        <p class="text-2xl font-bold text-indigo-600">${requiredStorageUnits} <span class="text-lg font-medium text-gray-800">units</span></p>
-                        <p class="mt-2 text-sm">For ${totalStorage} GB & ${totalIops} IOPS</p>
-                    </div>
-                </div>`;
+                const storageNodesByCapacity = (usableCapacityPerArray > 0) ? Math.ceil(totalStorage / usableCapacityPerArray) : Infinity;
+                const storageNodesByIops = (iopsPerArray > 0) ? Math.ceil(totalIops / iopsPerArray) : Infinity;
+                let requiredStorageUnits = Math.max(3, storageNodesByCapacity, storageNodesByIops);
+                if (!isFinite(requiredStorageUnits)) {
+                    errorDiv.textContent = 'Cannot determine storage nodes with the provided storage specs.';
+                    resultsDiv.classList.remove('hidden');
+                    return;
+                }
+                resultsHTML += `<div><h3 class="text-lg font-medium text-gray-900">Storage Nodes</h3><div class="mt-2 text-gray-600"><p class="text-2xl font-bold text-indigo-600">${requiredStorageUnits} <span class="text-lg font-medium text-gray-800">nodes/arrays</span></p><p class="mt-2 text-sm">For ${totalStorage} GB & ${totalIops} IOPS using RAID ${raidLevel}</p></div></div>`;
             }
             
+            const resultsContent = document.getElementById('results-content');
             resultsContent.className = calculateStorage ? 'grid lg:grid-cols-3 md:grid-cols-2 gap-8' : 'grid md:grid-cols-2 gap-8';
             resultsContent.innerHTML = resultsHTML;
 
-            overheadDetailsDiv.innerHTML = `
+            // --- 6. Display Detailed Breakdowns and Graphs ---
+            document.getElementById('overhead-details').innerHTML = `
                 <div class="info-box">
                     <h4 class="font-semibold text-gray-800">Node Breakdown:</h4>
                     <ul class="list-disc list-inside text-sm text-gray-600 mt-2 space-y-1">
                         <li>Total resources per node: <span class="font-semibold">${physicalCpuPerServer} Physical CPUs (${totalAvailableVcpu.toFixed(1)} vCPU)</span> & <span class="font-semibold">${memPerServer} GB</span></li>
                         <li>Calculated overhead per node: <span class="font-semibold">${reservedVcpuPerNode.toFixed(2)} vCPU</span> & <span class="font-semibold">${reservedMemPerNode.toFixed(2)} GB</span></li>
                         <li>Usable resources per node: <span class="font-semibold">${usableVcpuPerServer.toFixed(2)} vCPU</span> & <span class="font-semibold">${usableMemPerServer.toFixed(2)} GB</span></li>
-                         <li class="font-medium">Allocatable resources at ${maxUtilization}%: <span class="font-semibold">${allocatableVcpuPerServer.toFixed(2)} vCPU</span> & <span class="font-semibold">${allocatableMemPerServer.toFixed(2)} GB</span></li>
+                        <li class="font-medium">Allocatable resources at ${maxUtilization}%: <span class="font-semibold">${allocatableVcpuPerServer.toFixed(2)} vCPU</span> & <span class="font-semibold">${allocatableMemPerServer.toFixed(2)} GB</span></li>
                     </ul>
                 </div>`;
             
-            // --- Capacity Graph Generation ---
-            graphDetailsDiv.innerHTML = `
-                 <div class="bg-white p-4 rounded-lg shadow-sm border mt-6">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Capacity Breakdown</h3>
-                    <div class="grid md:grid-cols-2 gap-8">
-                        <div><canvas id="cpuChart"></canvas></div>
-                        <div><canvas id="memChart"></canvas></div>
-                    </div>
-                 </div>`;
-            
+            // --- Current Capacity Breakdown Graphs ---
+            document.getElementById('graph-details').innerHTML = `<div class="bg-white p-4 rounded-lg shadow-sm border mt-6"><h3 class="text-lg font-semibold text-gray-800 mb-2">Current Capacity Breakdown</h3><div class="grid md:grid-cols-2 gap-8"><div><canvas id="cpuChart"></canvas></div><div><canvas id="memChart"></canvas></div></div></div>`;
             if(cpuChart) cpuChart.destroy();
             if(memChart) memChart.destroy();
 
@@ -447,91 +530,137 @@
             const cpuChartData = {
                 labels: ['vCPU'],
                 datasets: [
-                    { label: 'Current Required', data: [initialWorkloadVcpu], backgroundColor: 'rgba(255, 99, 132, 0.5)' },
-                    { label: 'Recommended Capacity', data: [totalRecommendedVcpu], backgroundColor: 'rgba(54, 162, 235, 0.5)' }
+                    { label: 'Current Required', data: [initialAppWorkloadVcpu], backgroundColor: 'rgba(255, 99, 132, 0.5)' },
+                    { label: 'Total Capacity', data: [totalRecommendedVcpu], backgroundColor: 'rgba(54, 162, 235, 0.5)' }
                 ]
             };
-            if(enableGrowth) {
-                 cpuChartData.datasets.splice(1, 0, { label: `Projected Required`, data: [finalWorkloadVcpu], backgroundColor: 'rgba(153, 102, 255, 0.5)' });
-            }
             cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), { type: 'bar', data: cpuChartData, options: {plugins: { title: { display: true, text: 'CPU: Required vs. Capacity' }}, scales: { y: { beginAtZero: true } } } });
 
             const memChartData = {
                 labels: ['Memory (GB)'],
                 datasets: [
-                    { label: 'Current Required', data: [initialWorkloadMem], backgroundColor: 'rgba(255, 159, 64, 0.5)' },
-                    { label: 'Recommended Capacity', data: [totalRecommendedMem], backgroundColor: 'rgba(75, 192, 192, 0.5)' }
+                    { label: 'Current Required', data: [initialAppWorkloadMem], backgroundColor: 'rgba(255, 159, 64, 0.5)' },
+                    { label: 'Total Capacity', data: [totalRecommendedMem], backgroundColor: 'rgba(75, 192, 192, 0.5)' }
                 ]
             };
-             if(enableGrowth) {
-                 memChartData.datasets.splice(1, 0, { label: `Projected Required`, data: [finalWorkloadMem], backgroundColor: 'rgba(255, 205, 86, 0.5)' });
-            }
             memChart = new Chart(document.getElementById('memChart').getContext('2d'), { type: 'bar', data: memChartData, options: {plugins: { title: { display: true, text: 'Memory: Required vs. Capacity' }}, scales: { y: { beginAtZero: true } } } });
             
-            // --- Growth Graph Generation ---
+            // --- Growth Utilization Projection ---
             if(enableGrowth && forecastPeriod > 0) {
-                 growthGraphDetailsDiv.innerHTML = `
-                 <div class="bg-white p-4 rounded-lg shadow-sm border mt-6">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Resource Growth Projection</h3>
-                    <div class="grid md:grid-cols-2 gap-8">
-                        <div><canvas id="growthCpuChart"></canvas></div>
-                        <div><canvas id="growthMemChart"></canvas></div>
-                    </div>
-                 </div>`;
-
-                if(growthCpuChart) growthCpuChart.destroy();
-                if(growthMemChart) growthMemChart.destroy();
+                const growthGraphDiv = document.getElementById('growth-graph-details');
+                const growthRecDiv = document.getElementById('growth-recommendation-details');
+                growthGraphDiv.innerHTML = `<div class="bg-white p-4 rounded-lg shadow-sm border mt-6"><h3 class="text-lg font-semibold text-gray-800 mb-2">Projected Cluster Utilization</h3><div><canvas id="utilizationGrowthChart"></canvas></div></div>`;
+                if(utilizationGrowthChart) utilizationGrowthChart.destroy();
                 
                 const labels = Array.from({length: forecastPeriod + 1}, (_, i) => `Month ${i}`);
-                const cpuData = [];
-                const memData = [];
+                const cpuUtilizationData = [];
+                const memUtilizationData = [];
+                let cpuBreachMonth = -1;
+                let memBreachMonth = -1;
 
                 for (let i = 0; i <= forecastPeriod; i++) {
-                    cpuData.push(initialWorkloadVcpu * Math.pow(1 + monthlyGrowthRate, i));
-                    memData.push(initialWorkloadMem * Math.pow(1 + monthlyGrowthRate, i));
+                    const projectedVcpu = initialWorkloadVcpu * Math.pow(1 + monthlyGrowthRate, i);
+                    const projectedMem = initialWorkloadMem * Math.pow(1 + monthlyGrowthRate, i);
+                    const cpuUtil = (projectedVcpu / totalRecommendedVcpu) * 100;
+                    const memUtil = (projectedMem / totalRecommendedMem) * 100;
+                    cpuUtilizationData.push(cpuUtil);
+                    memUtilizationData.push(memUtil);
+
+                    if (cpuUtil > maxUtilization && cpuBreachMonth === -1) { cpuBreachMonth = i; }
+                    if (memUtil > maxUtilization && memBreachMonth === -1) { memBreachMonth = i; }
                 }
                 
-                growthCpuChart = new Chart(document.getElementById('growthCpuChart').getContext('2d'), { type: 'line', data: { labels, datasets: [{ label: 'Projected vCPU', data: cpuData, borderColor: 'rgba(153, 102, 255, 1)', tension: 0.1, fill: false }] }, options: { plugins: { title: { display: true, text: 'vCPU Growth Over Time' }}, scales: { y: { beginAtZero: true } } }});
-                growthMemChart = new Chart(document.getElementById('growthMemChart').getContext('2d'), { type: 'line', data: { labels, datasets: [{ label: 'Projected Memory (GB)', data: memData, borderColor: 'rgba(255, 205, 86, 1)', tension: 0.1, fill: false }] }, options: { plugins: { title: { display: true, text: 'Memory Growth Over Time' }}, scales: { y: { beginAtZero: true } } }});
+                let growthRecHTML = '';
+                if(cpuBreachMonth !== -1 || memBreachMonth !== -1) {
+                    let cpuMsg = cpuBreachMonth !== -1 ? `CPU utilization is projected to exceed the <strong>${maxUtilization}%</strong> threshold at <strong>Month ${cpuBreachMonth}</strong>.` : '';
+                    let memMsg = memBreachMonth !== -1 ? `Memory utilization is projected to exceed the <strong>${maxUtilization}%</strong> threshold at <strong>Month ${memBreachMonth}</strong>.` : '';
+                    growthRecHTML = `
+                    <div class="info-box border-yellow-500 bg-yellow-100">
+                         <h4 class="font-semibold text-yellow-800">Capacity Alert</h4>
+                         <p class="text-sm text-yellow-700 mt-1">
+                            ${cpuMsg} ${memMsg}<br>It is recommended to increase cluster capacity before this point to maintain performance and stability.
+                         </p>
+                    </div>`;
+                } else {
+                     growthRecHTML = `
+                    <div class="info-box border-green-500 bg-green-100">
+                         <h4 class="font-semibold text-green-800">Capacity Sufficient</h4>
+                         <p class="text-sm text-green-700 mt-1">
+                            The recommended cluster capacity appears sufficient for the entire <strong>${forecastPeriod}-month</strong> forecast period.
+                         </p>
+                    </div>`;
+                }
+                growthRecDiv.innerHTML = growthRecHTML;
+
+                utilizationGrowthChart = new Chart(document.getElementById('utilizationGrowthChart').getContext('2d'), { 
+                    type: 'line', 
+                    data: { 
+                        labels, 
+                        datasets: [
+                            { label: 'Projected CPU Utilization (%)', data: cpuUtilizationData, borderColor: 'rgba(153, 102, 255, 1)', backgroundColor: 'rgba(153, 102, 255, 0.1)', tension: 0.1, fill: true },
+                            { label: 'Projected Memory Utilization (%)', data: memUtilizationData, borderColor: 'rgba(255, 159, 64, 1)', backgroundColor: 'rgba(255, 159, 64, 0.1)', tension: 0.1, fill: true }
+                        ] 
+                    }, 
+                    options: { 
+                        plugins: { 
+                            title: { display: true, text: 'Projected Utilization vs. Capacity Threshold' },
+                            annotation: {
+                                annotations: {
+                                    thresholdLine: {
+                                        type: 'line',
+                                        yMin: maxUtilization,
+                                        yMax: maxUtilization,
+                                        borderColor: 'rgb(239, 68, 68)',
+                                        borderWidth: 2,
+                                        borderDash: [6, 6],
+                                        label: {
+                                            content: `Threshold (${maxUtilization}%)`,
+                                            display: true,
+                                            position: 'end',
+                                            backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                                            font: { weight: 'bold' }
+                                        }
+                                    }
+                                }
+                            }
+                        }, 
+                        scales: { y: { beginAtZero: true, suggestedMax: 100, title: { display: true, text: 'Utilization (%)' } } } 
+                    }
+                });
             }
 
-            resultsDiv.classList.remove('hidden');
+            resultsDiv.classList.remove('hidden'); // Show the final results card
         });
 
+        /**
+         * Exports the calculated data to an Excel file.
+         */
         document.getElementById('save-excel-btn').addEventListener('click', function() {
-            if (Object.keys(excelData).length === 0) {
-                alert("Please perform a calculation first before saving.");
+            if (Object.keys(excelData).length === 0 || !excelData.inputs) {
+                const errorDiv = document.getElementById('error');
+                if(errorDiv) {
+                    errorDiv.textContent = 'Please perform a calculation first before saving.';
+                    errorDiv.style.display = 'block';
+                    setTimeout(() => { errorDiv.style.display = 'none'; }, 3000);
+                }
                 return;
             }
+
             const wb = XLSX.utils.book_new();
             
-            // --- Summary Sheet ---
             const summaryData = [
                 ["Category", "Item", "Value"],
-                ["Recommendation", "Control Plane Nodes", excelData.results['Control Plane Nodes']],
-                ["Recommendation", "vCPU per Control Plane Node", excelData.results['vCPU per Control Plane Node']],
-                ["Recommendation", "Memory per Control Plane Node (GB)", excelData.results['Memory per Control Plane Node (GB)']],
-                ["Recommendation", "Worker Nodes", excelData.results['Worker Nodes']],
-                ["Recommendation", "Storage Units", excelData.results['Storage Units']],
-                ["Workload", "Initial vCPU Required", excelData.results['Initial vCPU Workload']],
-                ["Workload", "Initial Memory Required (GB)", excelData.results['Initial Memory Workload (GB)']],
-                ["Workload", "Projected vCPU Required", excelData.results['Projected vCPU Workload']],
-                ["Workload", "Projected Memory Required (GB)", excelData.results['Projected Memory Workload (GB)']],
-                ["Node Capacity", "Total vCPU per Worker", excelData.results['vCPU per Worker (Total)']],
-                ["Node Capacity", "Total Memory per Worker (GB)", excelData.results['Memory per Worker (Total GB)']],
-                ["Node Capacity", "Allocatable vCPU per Worker", excelData.results['vCPU per Worker (Allocatable)']],
-                ["Node Capacity", "Allocatable Memory per Worker (GB)", excelData.results['Memory per Worker (Allocatable GB)']],
             ];
             const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
             XLSX.utils.book_append_sheet(wb, wsSummary, "Sizing Summary");
 
-            // --- Inputs Sheet ---
+            // Inputs Sheet
             const wsInputs = XLSX.utils.json_to_sheet(excelData.inputs);
-             XLSX.utils.book_append_sheet(wb, wsInputs, "Input Parameters");
-
+            XLSX.utils.book_append_sheet(wb, wsInputs, "Input Parameters");
 
             XLSX.writeFile(wb, "OpenShift_Sizing_Report.xlsx");
         });
+
     </script>
 </body>
 </html>
