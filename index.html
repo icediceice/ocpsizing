@@ -150,8 +150,12 @@
                         </div>
                         <div id="growth-inputs" class="space-y-4 hidden">
                              <div>
-                                <label for="growthPercentage" class="block text-sm font-medium text-gray-700">Annual Growth (%)</label>
-                                <input type="number" id="growthPercentage" value="20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                <label for="cpuGrowthPercentage" class="block text-sm font-medium text-gray-700">Annual CPU Growth (%)</label>
+                                <input type="number" id="cpuGrowthPercentage" value="20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                             <div>
+                                <label for="memGrowthPercentage" class="block text-sm font-medium text-gray-700">Annual Memory Growth (%)</label>
+                                <input type="number" id="memGrowthPercentage" value="20" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                             </div>
                             <div>
                                 <label for="forecastPeriod" class="block text-sm font-medium text-gray-700">Forecast Period (Months)</label>
@@ -178,9 +182,7 @@
                 </div>
                  <div id="workload-summary-details" class="mb-6"></div>
                  <div id="results-content" class="grid md:grid-cols-2 gap-8"></div>
-                 <div id="recommendation-details" class="mt-6"></div>
                  <div id="growth-recommendation-details" class="mt-6"></div>
-                 <!-- FIX: Added the missing graph-details div below -->
                  <div id="graph-details" class="mt-6"></div>
                  <div id="growth-graph-details" class="mt-6"></div>
                  <div id="overhead-details" class="mt-6"></div>
@@ -354,7 +356,8 @@
 
             // Growth projections
             const enableGrowth = document.getElementById('growth-checkbox').checked;
-            const growthPercentage = parseInt(document.getElementById('growthPercentage').value) || 0;
+            const cpuGrowthPercentage = parseInt(document.getElementById('cpuGrowthPercentage').value) || 0;
+            const memGrowthPercentage = parseInt(document.getElementById('memGrowthPercentage').value) || 0;
             const forecastPeriod = parseInt(document.getElementById('forecastPeriod').value) || 0;
 
             // Storage specifications
@@ -376,7 +379,7 @@
             // --- 2. Clear Previous Results and Validate Inputs ---
             const resultsDiv = document.getElementById('results');
             const errorDiv = document.getElementById('error');
-            ['results-content', 'workload-summary-details', 'graph-details', 'growth-graph-details', 'overhead-details', 'recommendation-details', 'growth-recommendation-details'].forEach(id => {
+            ['results-content', 'workload-summary-details', 'graph-details', 'growth-graph-details', 'overhead-details', 'growth-recommendation-details'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.innerHTML = '';
             });
@@ -408,11 +411,18 @@
             // Apply growth projection to get the final (end of forecast) workload
             let finalWorkloadVcpu = initialWorkloadVcpu;
             let finalWorkloadMem = initialWorkloadMem;
-            let monthlyGrowthRate = 0;
-            if (enableGrowth && forecastPeriod > 0 && growthPercentage > 0) {
-                monthlyGrowthRate = (growthPercentage / 100) / 12;
-                finalWorkloadVcpu = initialWorkloadVcpu * Math.pow(1 + monthlyGrowthRate, forecastPeriod);
-                finalWorkloadMem = initialWorkloadMem * Math.pow(1 + monthlyGrowthRate, forecastPeriod);
+            let monthlyCpuGrowthRate = 0;
+            let monthlyMemGrowthRate = 0;
+
+            if (enableGrowth && forecastPeriod > 0) {
+                if (cpuGrowthPercentage > 0) {
+                    monthlyCpuGrowthRate = (cpuGrowthPercentage / 100) / 12;
+                    finalWorkloadVcpu = initialWorkloadVcpu * Math.pow(1 + monthlyCpuGrowthRate, forecastPeriod);
+                }
+                if (memGrowthPercentage > 0) {
+                    monthlyMemGrowthRate = (memGrowthPercentage / 100) / 12;
+                    finalWorkloadMem = initialWorkloadMem * Math.pow(1 + monthlyMemGrowthRate, forecastPeriod);
+                }
             }
 
             // Display workload summary
@@ -420,8 +430,8 @@
                 <div class="bg-white p-4 rounded-lg shadow-sm border">
                     <h3 class="text-lg font-semibold text-gray-800 mb-2">Total Aggregated Workload</h3>
                     <div class="grid grid-cols-2 gap-4 text-center">
-                        <div><p class="text-sm text-gray-500">Current vCPU Required</p><p class="text-xl font-bold text-indigo-600">${initialWorkloadVcpu.toFixed(2)}</p></div>
-                        <div><p class="text-sm text-gray-500">Current Memory Required</p><p class="text-xl font-bold text-indigo-600">${initialWorkloadMem.toFixed(2)} <span class="text-base font-medium">GB</span></p></div>
+                        <div><p class="text-sm text-gray-500">Current vCPU Required</p><p class="text-xl font-bold text-indigo-600">${initialAppWorkloadVcpu.toFixed(2)}</p></div>
+                        <div><p class="text-sm text-gray-500">Current Memory Required</p><p class="text-xl font-bold text-indigo-600">${initialAppWorkloadMem.toFixed(2)} <span class="text-base font-medium">GB</span></p></div>
                         ${enableGrowth && forecastPeriod > 0 ? `
                         <div><p class="text-sm text-gray-500">Projected vCPU (${forecastPeriod} Mo)</p><p class="text-xl font-bold text-purple-600">${finalWorkloadVcpu.toFixed(2)}</p></div>
                         <div><p class="text-sm text-gray-500">Projected Memory (${forecastPeriod} Mo)</p><p class="text-xl font-bold text-purple-600">${finalWorkloadMem.toFixed(2)} <span class="text-base font-medium">GB</span></p></div>
@@ -519,32 +529,80 @@
                     </ul>
                 </div>`;
             
-            // --- Current Capacity Breakdown Graphs ---
-            document.getElementById('graph-details').innerHTML = `<div class="bg-white p-4 rounded-lg shadow-sm border mt-6"><h3 class="text-lg font-semibold text-gray-800 mb-2">Current Capacity Breakdown</h3><div class="grid md:grid-cols-2 gap-8"><div><canvas id="cpuChart"></canvas></div><div><canvas id="memChart"></canvas></div></div></div>`;
+            // --- Current Capacity Utilization Graphs ---
+            document.getElementById('graph-details').innerHTML = `<div class="bg-white p-4 rounded-lg shadow-sm border mt-6"><h3 class="text-lg font-semibold text-gray-800 mb-2">Current Capacity Utilization</h3><div class="grid md:grid-cols-2 gap-8"><div><canvas id="cpuChart"></canvas></div><div><canvas id="memChart"></canvas></div></div></div>`;
             if(cpuChart) cpuChart.destroy();
             if(memChart) memChart.destroy();
 
             const totalRecommendedVcpu = workerNodes * allocatableVcpuPerServer;
             const totalRecommendedMem = workerNodes * allocatableMemPerServer;
-            
+
+            // Calculate current utilization percentages based on initial workload (not projected)
+            const currentCpuUtilization = totalRecommendedVcpu > 0 ? (initialAppWorkloadVcpu / totalRecommendedVcpu) * 100 : 0;
+            const currentMemUtilization = totalRecommendedMem > 0 ? (initialAppWorkloadMem / totalRecommendedMem) * 100 : 0;
+
             const cpuChartData = {
-                labels: ['vCPU'],
-                datasets: [
-                    { label: 'Current Required', data: [initialAppWorkloadVcpu], backgroundColor: 'rgba(255, 99, 132, 0.5)' },
-                    { label: 'Total Capacity', data: [totalRecommendedVcpu], backgroundColor: 'rgba(54, 162, 235, 0.5)' }
-                ]
+                labels: ['CPU'],
+                datasets: [{
+                    label: 'Current Utilization (%)',
+                    data: [currentCpuUtilization],
+                    backgroundColor: currentCpuUtilization > maxUtilization ? 'rgba(239, 68, 68, 0.6)' : 'rgba(54, 162, 235, 0.6)',
+                    borderColor: currentCpuUtilization > maxUtilization ? 'rgba(239, 68, 68, 1)' : 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
             };
-            cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), { type: 'bar', data: cpuChartData, options: {plugins: { title: { display: true, text: 'CPU: Required vs. Capacity' }}, scales: { y: { beginAtZero: true } } } });
+             cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), {
+                type: 'bar',
+                data: cpuChartData,
+                options: {
+                    plugins: {
+                        title: { display: true, text: 'Current CPU Utilization' },
+                        legend: { display: false },
+                        tooltip: {
+                             callbacks: {
+                                label: function(context) {
+                                    return `Utilization: ${context.raw.toFixed(2)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 100, title: { display: true, text: 'Utilization (%)' } },
+                    }
+                }
+            });
 
             const memChartData = {
-                labels: ['Memory (GB)'],
-                datasets: [
-                    { label: 'Current Required', data: [initialAppWorkloadMem], backgroundColor: 'rgba(255, 159, 64, 0.5)' },
-                    { label: 'Total Capacity', data: [totalRecommendedMem], backgroundColor: 'rgba(75, 192, 192, 0.5)' }
-                ]
+                labels: ['Memory'],
+                datasets: [{
+                    label: 'Current Utilization (%)',
+                    data: [currentMemUtilization],
+                    backgroundColor: currentMemUtilization > maxUtilization ? 'rgba(239, 68, 68, 0.6)' : 'rgba(255, 159, 64, 0.6)',
+                    borderColor: currentMemUtilization > maxUtilization ? 'rgba(239, 68, 68, 1)' : 'rgba(255, 159, 64, 1)',
+                    borderWidth: 1
+                }]
             };
-            memChart = new Chart(document.getElementById('memChart').getContext('2d'), { type: 'bar', data: memChartData, options: {plugins: { title: { display: true, text: 'Memory: Required vs. Capacity' }}, scales: { y: { beginAtZero: true } } } });
-            
+            memChart = new Chart(document.getElementById('memChart').getContext('2d'), {
+                type: 'bar',
+                data: memChartData,
+                options: {
+                    plugins: {
+                        title: { display: true, text: 'Current Memory Utilization' },
+                        legend: { display: false },
+                         tooltip: {
+                             callbacks: {
+                                label: function(context) {
+                                    return `Utilization: ${context.raw.toFixed(2)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 100, title: { display: true, text: 'Utilization (%)' } },
+                    }
+                }
+            });
+
             // --- Growth Utilization Projection ---
             if(enableGrowth && forecastPeriod > 0) {
                 const growthGraphDiv = document.getElementById('growth-graph-details');
@@ -559,8 +617,8 @@
                 let memBreachMonth = -1;
 
                 for (let i = 0; i <= forecastPeriod; i++) {
-                    const projectedVcpu = initialWorkloadVcpu * Math.pow(1 + monthlyGrowthRate, i);
-                    const projectedMem = initialWorkloadMem * Math.pow(1 + monthlyGrowthRate, i);
+                    const projectedVcpu = initialWorkloadVcpu * Math.pow(1 + monthlyCpuGrowthRate, i);
+                    const projectedMem = initialWorkloadMem * Math.pow(1 + monthlyMemGrowthRate, i);
                     const cpuUtil = (projectedVcpu / totalRecommendedVcpu) * 100;
                     const memUtil = (projectedMem / totalRecommendedMem) * 100;
                     cpuUtilizationData.push(cpuUtil);
