@@ -202,6 +202,55 @@
         let excelData = {}; // Global object to store calculation data for Excel export
 
         /**
+         * Calculates system overhead for a single node based on its resources.
+         * CPU and Memory reservations are now dynamic based on Red Hat's formulas.
+         * @param {number} physicalCpus - The number of physical CPU cores on the node.
+         * @param {number} mem - The total memory (GB) on the node.
+         * @param {number} cpuRatio - The configured CPU to vCPU conversion ratio.
+         * @returns {{reservedVcpu: number, reservedMem: number}} - The reserved vCPU and Memory.
+         */
+        function calculateOverhead(physicalCpus, mem, cpuRatio) {
+            // --- DYNAMIC CPU RESERVATION ---
+            let reservedCores;
+            if (physicalCpus <= 1) {
+                reservedCores = 0.06;
+            } else {
+                reservedCores = (0.06 + 0.012) * (physicalCpus - 1);
+            }
+            const reservedVcpu = reservedCores * cpuRatio;
+    
+            // --- DYNAMIC MEMORY RESERVATION ---
+            let reservedMem = 0;
+            if (mem > 0) {
+                // 25% of the first 4GB
+                const firstChunk = Math.min(mem, 4);
+                reservedMem += firstChunk * 0.25;
+            }
+            if (mem > 4) {
+                // 20% of the next 4GB (from 4GB to 8GB)
+                const secondChunk = Math.min(mem - 4, 4);
+                reservedMem += secondChunk * 0.20;
+            }
+            if (mem > 8) {
+                // 10% of the next 8GB (from 8GB to 16GB)
+                const thirdChunk = Math.min(mem - 8, 8);
+                reservedMem += thirdChunk * 0.10;
+            }
+            if (mem > 16) {
+                // 6% of the next 112GB (from 16GB to 128GB)
+                const fourthChunk = Math.min(mem - 16, 112);
+                reservedMem += fourthChunk * 0.06;
+            }
+            if (mem > 128) {
+                // 2% of the rest
+                const fifthChunk = mem - 128;
+                reservedMem += fifthChunk * 0.02;
+            }
+            
+            return { reservedVcpu, reservedMem };
+        }
+
+        /**
          * Creates a new workload entry form and appends it to the list.
          */
         function createWorkloadEntry() {
@@ -419,7 +468,7 @@
                     monthlyCpuGrowthRate = (cpuGrowthPercentage / 100) / 12;
                     finalWorkloadVcpu = initialWorkloadVcpu * Math.pow(1 + monthlyCpuGrowthRate, forecastPeriod);
                 }
-                if (memGrowthPercentage > 0) {
+                 if (memGrowthPercentage > 0) {
                     monthlyMemGrowthRate = (memGrowthPercentage / 100) / 12;
                     finalWorkloadMem = initialWorkloadMem * Math.pow(1 + monthlyMemGrowthRate, forecastPeriod);
                 }
@@ -442,12 +491,7 @@
             // --- 4. Calculate Allocatable Node Resources ---
             const totalAvailableVcpu = physicalCpuPerServer * cpuConversionRatio;
             
-            function calculateOverhead(vcpu, mem) {
-                let reservedVcpu = (vcpu <= 2) ? 0.5 : (vcpu <= 4) ? 1 : (vcpu <= 8) ? 1.5 : (vcpu <= 16) ? 2 : 2.5;
-                let reservedMem = (mem <= 4) ? 1 : (mem <= 8) ? 1.5 : (mem <= 16) ? 2.5 : (mem <= 32) ? 3.5 : (mem <= 64) ? 4.5 : 6;
-                return { reservedVcpu, reservedMem };
-            }
-            const { reservedVcpu: reservedVcpuPerNode, reservedMem: reservedMemPerNode } = calculateOverhead(totalAvailableVcpu, memPerServer);
+            const { reservedVcpu: reservedVcpuPerNode, reservedMem: reservedMemPerNode } = calculateOverhead(physicalCpuPerServer, memPerServer, cpuConversionRatio);
             
             const utilizationMultiplier = maxUtilization / 100;
             const usableVcpuPerServer = totalAvailableVcpu - reservedVcpuPerNode;
