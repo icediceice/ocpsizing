@@ -710,8 +710,8 @@
                         <div id="growthInputs" style="display: none;">
                             <div class="growth-inputs">
                                 <div class="form-group">
-                                    <label for="growthRate">Monthly Growth Rate (%):</label>
-                                    <input type="number" id="growthRate" value="10" min="0" max="100" step="1">
+                                    <label for="growthRate">Annual Growth Rate (%):</label>
+                                    <input type="number" id="growthRate" value="50" min="0" max="200" step="1">
                                 </div>
                                 <div class="form-group">
                                     <label for="projectionMonths">Projection Period (Months):</label>
@@ -1020,12 +1020,19 @@
             };
         }
 
-        function calculateGrowthProjections(baseWorkloads, growthRate, months, usableVcpuPerNode, usableMemoryPerNode, maxUtilization, currentWorkerNodes) {
+        function calculateGrowthProjections(baseWorkloads, annualGrowthRate, months, usableVcpuPerNode, usableMemoryPerNode, maxUtilization, currentWorkerNodes) {
             const projections = [];
             const maxUtilizationPercent = maxUtilization * 100;
             
+            // Convert annual growth rate to monthly growth rate
+            const monthlyGrowthRate = Math.pow(1 + (annualGrowthRate / 100), 1/12) - 1;
+            
+            let firstUrgentMonth = null;
+            let firstWarningMonth = null;
+            let firstCautionMonth = null;
+            
             for (let month = 0; month <= months; month++) {
-                const growthFactor = month === 0 ? 1 : Math.pow(1 + (growthRate / 100), month);
+                const growthFactor = month === 0 ? 1 : Math.pow(1 + monthlyGrowthRate, month);
                 
                 const projectedWorkloads = baseWorkloads.map(workload => ({
                     ...workload,
@@ -1063,14 +1070,28 @@
                     utilizationGrowth = maxCurrentUtilization - projections[projections.length - 1].maxUtilization;
                 }
                 
-                // Recommendation logic
+                // Recommendation logic - only set once for the first occurrence
                 let recommendation = '';
+                let showRecommendation = false;
+                
                 if (maxCurrentUtilization > maxUtilizationPercent + 5) {
                     recommendation = 'URGENT: Add nodes immediately';
+                    if (firstUrgentMonth === null) {
+                        firstUrgentMonth = month;
+                        showRecommendation = true;
+                    }
                 } else if (maxCurrentUtilization > maxUtilizationPercent) {
                     recommendation = 'WARNING: Plan node expansion';
+                    if (firstWarningMonth === null && firstUrgentMonth === null) {
+                        firstWarningMonth = month;
+                        showRecommendation = true;
+                    }
                 } else if (maxCurrentUtilization > maxUtilizationPercent - 10) {
                     recommendation = 'CAUTION: Monitor closely';
+                    if (firstCautionMonth === null && firstWarningMonth === null && firstUrgentMonth === null) {
+                        firstCautionMonth = month;
+                        showRecommendation = true;
+                    }
                 } else {
                     recommendation = 'OK: Capacity sufficient';
                 }
@@ -1088,7 +1109,9 @@
                     utilizationGrowth: utilizationGrowth,
                     needsExpansion: needsExpansion,
                     recommendation: recommendation,
-                    growthFactor: growthFactor
+                    showRecommendation: showRecommendation,
+                    growthFactor: growthFactor,
+                    monthlyGrowthRate: monthlyGrowthRate * 100 // Store as percentage for display
                 });
             }
             
@@ -1170,9 +1193,15 @@
             
             // Growth projections sheet (if available)
             if (calc.growthProjections) {
+                const annualGrowthRate = parseFloat(document.getElementById('growthRate').value);
+                const monthlyGrowthRate = calc.growthProjections[1] ? calc.growthProjections[1].monthlyGrowthRate : 0;
+                
                 const growthData = [
                     ['Growth Projections'],
-                    ['Month', 'Total Instances', 'Total vCPU', 'Total Memory (GB)', 'Optimal Nodes', 'CPU Utilization (%)', 'Memory Utilization (%)', 'Max Utilization (%)', 'Utilization Growth (%)', 'Recommendation']
+                    ['Annual Growth Rate (%):', annualGrowthRate],
+                    ['Equivalent Monthly Growth Rate (%):', monthlyGrowthRate.toFixed(3)],
+                    [''],
+                    ['Month', 'Total Instances', 'Total vCPU', 'Total Memory (GB)', 'Optimal Nodes', 'CPU Utilization (%)', 'Memory Utilization (%)', 'Max Utilization (%)', 'Utilization Growth (%)', 'Recommendation', 'Show Alert']
                 ];
                 
                 calc.growthProjections.forEach(proj => {
@@ -1186,7 +1215,8 @@
                         proj.memoryUtilization.toFixed(1),
                         proj.maxUtilization.toFixed(1),
                         proj.utilizationGrowth.toFixed(1),
-                        proj.recommendation
+                        proj.recommendation,
+                        proj.showRecommendation ? 'YES' : 'NO'
                     ]);
                 });
                 
@@ -1444,12 +1474,12 @@
             // Growth projections
             let growthProjections = null;
             if (document.getElementById('enableGrowth').checked) {
-                const growthRate = parseFloat(document.getElementById('growthRate').value);
+                const annualGrowthRate = parseFloat(document.getElementById('growthRate').value);
                 const projectionMonths = parseInt(document.getElementById('projectionMonths').value);
                 
                 growthProjections = calculateGrowthProjections(
                     workloads, 
-                    growthRate, 
+                    annualGrowthRate, 
                     projectionMonths, 
                     usableVcpuPerNode, 
                     usableMemoryPerNode, 
@@ -1719,13 +1749,19 @@
             // Growth projections
             if (calc.growthProjections) {
                 const currentUtilization = Math.max(calc.actualCpuUtilization, calc.actualMemoryUtilization);
+                const annualGrowthRate = parseFloat(document.getElementById('growthRate').value);
+                const monthlyGrowthRate = calc.growthProjections[1] ? calc.growthProjections[1].monthlyGrowthRate : 0;
                 
                 resultsHTML += `
                     <div class="growth-chart-container">
                         <h3>📈 Growth Projections</h3>
-                        <div class="result-item" style="margin-bottom: 20px;">
+                        <div class="result-item" style="margin-bottom: 15px;">
                             <span>Current Cluster Utilization:</span>
                             <span class="result-value">${currentUtilization.toFixed(1)}%</span>
+                        </div>
+                        <div class="result-item" style="margin-bottom: 15px;">
+                            <span>Annual Growth Rate:</span>
+                            <span class="result-value">${annualGrowthRate}% (${monthlyGrowthRate.toFixed(2)}% monthly)</span>
                         </div>
                         <canvas id="growthChart" width="400" height="200"></canvas>
                     </div>
@@ -1773,36 +1809,44 @@
                     </div>
                 `;
 
-                // Recommendations section
+                // Recommendations section - only show the first critical recommendation
+                const firstCriticalRecommendation = calc.growthProjections.find(proj => 
+                    proj.showRecommendation && (proj.recommendation.includes('URGENT') || proj.recommendation.includes('WARNING') || proj.recommendation.includes('CAUTION'))
+                );
+
                 resultsHTML += `
                     <div class="recommendation-card">
-                        <h4>🎯 Node Expansion Recommendations</h4>
+                        <h4>🎯 Node Expansion Recommendation</h4>
                 `;
 
-                const criticalMonths = calc.growthProjections.filter(proj => 
-                    proj.recommendation.includes('URGENT') || proj.recommendation.includes('WARNING')
-                ).slice(0, 5);
+                if (firstCriticalRecommendation) {
+                    let statusClass = '';
+                    if (firstCriticalRecommendation.recommendation.includes('URGENT')) statusClass = 'status-urgent';
+                    else if (firstCriticalRecommendation.recommendation.includes('WARNING')) statusClass = 'status-warning';
+                    else if (firstCriticalRecommendation.recommendation.includes('CAUTION')) statusClass = 'status-caution';
+                    else statusClass = 'status-ok';
 
-                if (criticalMonths.length > 0) {
-                    criticalMonths.forEach(proj => {
-                        let statusClass = '';
-                        if (proj.recommendation.includes('URGENT')) statusClass = 'status-urgent';
-                        else if (proj.recommendation.includes('WARNING')) statusClass = 'status-warning';
-                        else if (proj.recommendation.includes('CAUTION')) statusClass = 'status-caution';
-                        else statusClass = 'status-ok';
+                    const nodesNeeded = firstCriticalRecommendation.optimalWorkerNodes - calc.finalWorkerNodes;
 
-                        resultsHTML += `
-                            <div class="recommendation-item">
-                                <span>Month ${proj.month}: ${proj.maxUtilization.toFixed(1)}% utilization</span>
-                                <span class="recommendation-status ${statusClass}">${proj.recommendation}</span>
-                            </div>
-                        `;
-                    });
+                    resultsHTML += `
+                        <div class="recommendation-item">
+                            <span>Month ${firstCriticalRecommendation.month}: ${firstCriticalRecommendation.maxUtilization.toFixed(1)}% utilization</span>
+                            <span class="recommendation-status ${statusClass}">${firstCriticalRecommendation.recommendation}</span>
+                        </div>
+                        <div class="recommendation-item">
+                            <span>Recommended Action:</span>
+                            <span class="result-value">Add ${nodesNeeded > 0 ? nodesNeeded : 'additional'} worker node(s)</span>
+                        </div>
+                        <div class="recommendation-item">
+                            <span>Target Instances at that time:</span>
+                            <span class="result-value">${firstCriticalRecommendation.totalInstances} instances</span>
+                        </div>
+                    `;
                 } else {
                     resultsHTML += `
                         <div class="recommendation-item">
-                            <span>No immediate expansion needed within projection period</span>
-                            <span class="recommendation-status status-ok">OK</span>
+                            <span>No capacity expansion needed within projection period</span>
+                            <span class="recommendation-status status-ok">OK: Current capacity sufficient</span>
                         </div>
                     `;
                 }
