@@ -596,25 +596,42 @@
 
         <div class="main-content">
             <div class="input-section">
-                <h2 class="section-title">📊 Configuration</h2>
-
-                <!-- Logging Stack Selection -->
-                <div class="form-group">
-                    <label>Choose Logging Stack:</label>
-                    <div class="radio-group">
-                        <div class="radio-option selected" onclick="selectLoggingStack('elasticsearch')">
-                            <input type="radio" name="loggingStack" value="elasticsearch" checked>
-                            <h3>Elasticsearch</h3>
-                            <p>Higher infra resources, lower per-node overhead</p>
+                <!-- Multiple Workload Specifications -->
+                <div class="workload-section">
+                    <div class="workload-header">
+                        <span>💻 Step 1: Define Your Workloads</span>
+                    </div>
+                    <div class="workload-content">
+                        <div id="workloads-container">
+                            <!-- Workloads will be dynamically added here -->
                         </div>
-                        <div class="radio-option" onclick="selectLoggingStack('loki')">
-                            <input type="radio" name="loggingStack" value="loki">
-                            <h3>LokiStack</h3>
-                            <p>Lower infra resources, higher per-node overhead</p>
-                        </div>
+                        <button class="add-workload-btn" onclick="addWorkload()">➕ Add Workload Type</button>
                     </div>
                 </div>
 
+                <!-- Worker Node Specifications -->
+                <h3 style="margin: 30px 0 20px 0; color: #333;">⚙️ Step 2: Configure Your Infrastructure</h3>
+
+                <div class="form-group">
+                    <label for="cpuCores">Physical CPU Cores per Node: <span class="info-tooltip" title="Physical CPU cores available on each worker node">?</span></label>
+                    <input type="number" id="cpuCores" value="8" min="1">
+                </div>
+
+                <div class="form-group">
+                    <label for="cpuToVcpuRatio">CPU to vCPU Ratio: <span class="info-tooltip" title="How many vCPUs per physical CPU core (e.g., 2 = hyperthreading)">?</span></label>
+                    <input type="number" id="cpuToVcpuRatio" value="2" min="1" step="0.1">
+                </div>
+
+                <div class="form-group">
+                    <label for="memoryPerNode">Memory per Node (GB): <span class="info-tooltip" title="Total memory available on each worker node">?</span></label>
+                    <input type="number" id="memoryPerNode" value="32" min="1">
+                </div>
+
+                <div class="form-group">
+                    <label for="maxUtilization">Max Host Utilization (%): <span class="info-tooltip" title="Maximum resource utilization before provisioning new nodes">?</span></label>
+                    <input type="number" id="maxUtilization" value="80" min="50" max="95">
+                </div>
+                
                 <!-- Cluster Configuration Options -->
                 <div class="form-group">
                     <label>Cluster Configuration:</label>
@@ -630,16 +647,22 @@
                     </div>
                 </div>
 
-                <!-- Multiple Workload Specifications -->
-                <div class="workload-section">
-                    <div class="workload-header">
-                        <span>💻 Workload Specifications</span>
-                    </div>
-                    <div class="workload-content">
-                        <div id="workloads-container">
-                            <!-- Workloads will be dynamically added here -->
+                <h3 style="margin: 30px 0 20px 0; color: #333;">🚀 Step 3: Advanced Configuration (Optional)</h3>
+
+                <!-- Logging Stack Selection -->
+                <div class="form-group">
+                    <label>Choose Logging Stack:</label>
+                    <div class="radio-group">
+                        <div class="radio-option selected" onclick="selectLoggingStack('elasticsearch')">
+                            <input type="radio" name="loggingStack" value="elasticsearch" checked>
+                            <h3>Elasticsearch</h3>
+                            <p>Higher infra resources, lower per-node overhead</p>
                         </div>
-                        <button class="add-workload-btn" onclick="addWorkload()">➕ Add Workload Type</button>
+                        <div class="radio-option" onclick="selectLoggingStack('loki')">
+                            <input type="radio" name="loggingStack" value="loki">
+                            <h3>LokiStack</h3>
+                            <p>Lower infra resources, higher per-node overhead</p>
+                        </div>
                     </div>
                 </div>
 
@@ -671,33 +694,10 @@
                     </div>
                 </div>
 
-                <!-- Worker Node Specifications -->
-                <h3 style="margin: 30px 0 20px 0; color: #333;">⚙️ Worker Node Specifications</h3>
-
-                <div class="form-group">
-                    <label for="cpuCores">Physical CPU Cores per Node: <span class="info-tooltip" title="Physical CPU cores available on each worker node">?</span></label>
-                    <input type="number" id="cpuCores" value="8" min="1">
-                </div>
-
-                <div class="form-group">
-                    <label for="cpuToVcpuRatio">CPU to vCPU Ratio: <span class="info-tooltip" title="How many vCPUs per physical CPU core (e.g., 2 = hyperthreading)">?</span></label>
-                    <input type="number" id="cpuToVcpuRatio" value="2" min="1" step="0.1">
-                </div>
-
-                <div class="form-group">
-                    <label for="memoryPerNode">Memory per Node (GB): <span class="info-tooltip" title="Total memory available on each worker node">?</span></label>
-                    <input type="number" id="memoryPerNode" value="32" min="1">
-                </div>
-
-                <div class="form-group">
-                    <label for="maxUtilization">Max Host Utilization (%): <span class="info-tooltip" title="Maximum resource utilization before provisioning new nodes">?</span></label>
-                    <input type="number" id="maxUtilization" value="80" min="50" max="95">
-                </div>
-
                 <!-- Growth Projection Module -->
                 <div class="growth-section">
                     <div class="growth-header" onclick="toggleGrowthSection()">
-                        <span>📈 Growth Projection (Optional)</span>
+                        <span>📈 Growth Projection</span>
                         <span id="growthToggle">▼</span>
                     </div>
                     <div class="growth-content" id="growthContent">
