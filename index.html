@@ -136,6 +136,18 @@
             color: white;
         }
 
+        .radio-option.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+
+        .radio-option.disabled:hover {
+            transform: none;
+            box-shadow: none;
+            border-color: #e9ecef;
+        }
         .radio-option input[type="radio"] {
             display: none;
         }
@@ -148,6 +160,10 @@
         .radio-option p {
             font-size: 0.9rem;
             opacity: 0.8;
+        }
+
+        .radio-option label {
+            cursor: pointer;
         }
 
         .checkbox-group {
@@ -211,7 +227,7 @@
 
         .workload-inputs {
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1.3fr;
+            grid-template-columns: 1.8fr 0.8fr 0.8fr 1fr 1.2fr;
             gap: 15px;
             align-items: end;
         }
@@ -228,7 +244,7 @@
             margin-bottom: 5px;
         }
 
-        .workload-field input {
+        .workload-field input, .workload-field select {
             padding: 10px;
             border: 2px solid #e9ecef;
             border-radius: 6px;
@@ -238,7 +254,7 @@
             box-sizing: border-box;
         }
 
-        .workload-field input:focus {
+        .workload-field input:focus, .workload-field select:focus {
             outline: none;
             border-color: #4facfe;
             box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.1);
@@ -450,6 +466,12 @@
             margin-top: 20px;
             font-weight: 500;
         }
+        
+        .result-card .status-icon {
+            font-size: 1.5rem;
+            margin-right: 10px;
+        }
+
 
         .info-tooltip {
             display: inline-block;
@@ -564,6 +586,27 @@
         .status-caution { background: #fd7e14; }
         .status-ok { background: #28a745; }
 
+        .reset-btn {
+            background: linear-gradient(135deg, #6c757d 0%, #343a40 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-left: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .reset-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2rem;
@@ -596,135 +639,239 @@
 
         <div class="main-content">
             <div class="input-section">
-                <!-- Multiple Workload Specifications -->
-                <div class="workload-section">
-                    <div class="workload-header">
-                        <span>💻 Step 1: Define Your Workloads</span>
-                    </div>
-                    <div class="workload-content">
-                        <div id="workloads-container">
-                            <!-- Workloads will be dynamically added here -->
-                        </div>
-                        <button class="add-workload-btn" onclick="addWorkload()">➕ Add Workload Type</button>
-                    </div>
-                </div>
-
-                <!-- Worker Node Specifications -->
-                <h3 style="margin: 30px 0 20px 0; color: #333;">⚙️ Step 2: Configure Your Infrastructure</h3>
-
+                <!-- NEW: Mode Selector -->
                 <div class="form-group">
-                    <label for="cpuCores">Physical CPU Cores per Node: <span class="info-tooltip" title="Physical CPU cores available on each worker node">?</span></label>
-                    <input type="number" id="cpuCores" value="8" min="1">
-                </div>
-
-                <div class="form-group">
-                    <label for="cpuToVcpuRatio">CPU to vCPU Ratio: <span class="info-tooltip" title="How many vCPUs per physical CPU core (e.g., 2 = hyperthreading)">?</span></label>
-                    <input type="number" id="cpuToVcpuRatio" value="2" min="1" step="0.1">
-                </div>
-
-                <div class="form-group">
-                    <label for="memoryPerNode">Memory per Node (GB): <span class="info-tooltip" title="Total memory available on each worker node">?</span></label>
-                    <input type="number" id="memoryPerNode" value="32" min="1">
-                </div>
-
-                <div class="form-group">
-                    <label for="maxUtilization">Max Host Utilization (%): <span class="info-tooltip" title="Maximum resource utilization before provisioning new nodes">?</span></label>
-                    <input type="number" id="maxUtilization" value="80" min="50" max="95">
-                </div>
-                
-                <!-- Cluster Configuration Options -->
-                <div class="form-group">
-                    <label>Cluster Configuration:</label>
-                    <div class="checkbox-group">
-                        <div class="checkbox-item" onclick="toggleCheckbox('mergeMasters')">
-                            <input type="checkbox" id="mergeMasters">
-                            <label for="mergeMasters">Merge Master nodes with Worker nodes (Compact cluster)</label>
-                        </div>
-                        <div class="checkbox-item" onclick="toggleCheckbox('mergeInfra')">
-                            <input type="checkbox" id="mergeInfra">
-                            <label for="mergeInfra">Merge Infrastructure nodes with Worker nodes</label>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 style="margin: 30px 0 20px 0; color: #333;">🚀 Step 3: Advanced Configuration (Optional)</h3>
-
-                <!-- Logging Stack Selection -->
-                <div class="form-group">
-                    <label>Choose Logging Stack:</label>
-                    <div class="radio-group">
-                        <div class="radio-option selected" onclick="selectLoggingStack('elasticsearch')">
-                            <input type="radio" name="loggingStack" value="elasticsearch" checked>
-                            <h3>Elasticsearch</h3>
-                            <p>Higher infra resources, lower per-node overhead</p>
-                        </div>
-                        <div class="radio-option" onclick="selectLoggingStack('loki')">
-                            <input type="radio" name="loggingStack" value="loki">
-                            <h3>LokiStack</h3>
-                            <p>Lower infra resources, higher per-node overhead</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Logging Storage Configuration -->
-                <div class="logging-storage-section">
-                    <div class="logging-storage-header" onclick="toggleLoggingStorageSection()">
-                        <span>💾 Logging Storage Configuration</span>
-                        <span id="storageToggle">▼</span>
-                    </div>
-                    <div class="logging-storage-content" id="storageContent">
-                        <div class="storage-inputs">
-                            <div class="form-group">
-                                <label for="logVolumePerPod">Log Volume per Pod (MB/day): <span class="info-tooltip" title="Average log volume generated per pod per day">?</span></label>
-                                <input type="number" id="logVolumePerPod" value="100" min="1">
-                            </div>
-                            <div class="form-group">
-                                <label for="logRetentionDays">Log Retention (Days): <span class="info-tooltip" title="How long to keep logs before deletion">?</span></label>
-                                <input type="number" id="logRetentionDays" value="30" min="1" max="365">
-                            </div>
-                            <div class="form-group">
-                                <label for="compressionRatio">Compression Ratio: <span class="info-tooltip" title="Log compression factor (2 = 50% compression)">?</span></label>
-                                <input type="number" id="compressionRatio" value="3" min="1" max="10" step="0.1">
-                            </div>
-                            <div class="form-group">
-                                <label for="replicationFactor">Replication Factor: <span class="info-tooltip" title="Number of copies for HA (Elasticsearch only)">?</span></label>
-                                <input type="number" id="replicationFactor" value="1" min="1" max="3">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Growth Projection Module -->
-                <div class="growth-section">
-                    <div class="growth-header" onclick="toggleGrowthSection()">
-                        <span>📈 Growth Projection</span>
-                        <span id="growthToggle">▼</span>
-                    </div>
-                    <div class="growth-content" id="growthContent">
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enableGrowth" onchange="toggleGrowthInputs()"> 
-                                Enable Growth Projections
+                    <label>Select Calculator Mode</label>
+                    <div class="radio-group" id="mode-selector">
+                        <div class="radio-option selected" onclick="switchMode('sizing', this)">
+                            <input type="radio" id="modeSizing" name="calculatorMode" value="sizing" checked>
+                            <label for="modeSizing">
+                                <h3>Resource Sizing</h3>
+                                <p>Calculate infrastructure needed for your workloads.</p>
                             </label>
                         </div>
-                        <div id="growthInputs" style="display: none;">
-                            <div class="growth-inputs">
-                                <div class="form-group">
-                                    <label for="growthRate">Annual Growth Rate (%):</label>
-                                    <input type="number" id="growthRate" value="50" min="0" max="200" step="1">
-                                </div>
-                                <div class="form-group">
-                                    <label for="projectionMonths">Projection Period (Months):</label>
-                                    <input type="number" id="projectionMonths" value="12" min="1" max="60">
-                                </div>
-                            </div>
+                        <div class="radio-option" onclick="switchMode('capacity', this)">
+                            <input type="radio" id="modeCapacity" name="calculatorMode" value="capacity">
+                            <label for="modeCapacity">
+                                <h3>Capacity Estimator</h3>
+                                <p>Estimate workloads an existing infrastructure can support.</p>
+                            </label>
                         </div>
                     </div>
                 </div>
 
-                <div class="btn-container">
-                    <button class="calculate-btn" onclick="calculateResources()">🔢 Calculate Resources</button>
-                    <button class="export-btn" onclick="exportToExcel()" id="exportBtn" style="display: none;">📊 Export to Excel</button>
+                <div id="sizing-calculator-inputs">
+                    <!-- Multiple Workload Specifications -->
+                    <div class="workload-section">
+                        <div class="workload-header">
+                            <span>💻 Step 1: Define Your Workloads</span>
+                        </div>
+                        <div class="workload-content">
+                            <div id="workloads-container">
+                                <!-- Workloads will be dynamically added here -->
+                            </div>
+                            <button class="add-workload-btn" onclick="addWorkload()">➕ Add Workload Type</button>
+                        </div>
+                    </div>
+
+                    <!-- Worker Node Specifications -->
+                    <h3 style="margin: 30px 0 20px 0; color: #333;">⚙️ Step 2: Configure Your Infrastructure</h3>
+
+                    <div class="form-group">
+                        <label for="cpuCores">Physical CPU Cores per Node: <span class="info-tooltip" title="Physical CPU cores available on each worker node">?</span></label>
+                        <input type="number" id="cpuCores" value="8" min="1" onchange="saveInputsToLocalStorage()">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="customizeSockets" onchange="toggleSocketInput(); saveInputsToLocalStorage();">
+                            <label for="customizeSockets">Customize Sockets per Node (Default: 2)</label>
+                        </div>
+                        <!-- This input is always in the DOM, just not visible by default. Its value is used in calculations. -->
+                        <input type="number" id="socketsPerNode" value="2" min="1" style="display: none; margin-top: 10px;" onchange="saveInputsToLocalStorage()">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cpuToVcpuRatio">CPU to vCPU Ratio: <span class="info-tooltip" title="How many vCPUs per physical CPU core (e.g., 2 = hyperthreading)">?</span></label>
+                        <input type="number" id="cpuToVcpuRatio" value="2" min="1" step="0.1" onchange="saveInputsToLocalStorage()">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="memoryPerNode">Memory per Node (GB): <span class="info-tooltip" title="Total memory available on each worker node">?</span></label>
+                        <input type="number" id="memoryPerNode" value="32" min="1" onchange="saveInputsToLocalStorage()">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="maxUtilization">Max Host Utilization (%): <span class="info-tooltip" title="Maximum resource utilization before provisioning new nodes">?</span></label>
+                        <input type="number" id="maxUtilization" value="80" min="50" max="95" onchange="saveInputsToLocalStorage()">
+                    </div>
+                    
+                    <!-- Cluster Configuration Options -->
+                    <div class="form-group">
+                        <label>Cluster Configuration:</label>
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="mergeMasters" onchange="saveInputsToLocalStorage()">
+                                <label for="mergeMasters">Merge Master nodes with Worker nodes (Compact cluster)</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 style="margin: 30px 0 20px 0; color: #333;">🚀 Step 3: Advanced Configuration (Optional)</h3>
+
+                    <!-- Logging Stack Selection -->
+                    <div class="form-group">
+                        <label>Choose Logging Stack:</label>
+                        <div class="radio-group">
+                            <div class="radio-option selected" onclick="selectLoggingStack('elasticsearch', this)">
+                                <input type="radio" id="logStackEs" name="loggingStack" value="elasticsearch" checked>
+                                <label for="logStackEs">
+                                    <h3>Elasticsearch</h3>
+                                    <p>Higher infra resources, lower per-node overhead</p>
+                                </label>
+                            </div>
+                            <div class="radio-option" onclick="selectLoggingStack('loki', this)">
+                                <input type="radio" id="logStackLoki" name="loggingStack" value="loki">
+                                <label for="logStackLoki">
+                                    <h3>LokiStack</h3>
+                                    <p>Lower infra resources, higher per-node overhead</p>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Subscription Type Selection -->
+                    <div class="form-group">
+                        <label>OpenShift Subscription Type:</label>
+                        <div class="radio-group" id="subscription-type-selector">
+                            <div class="radio-option selected" onclick="selectSubscriptionType('core', this)">
+                                <input type="radio" id="subTypeCore" name="subscriptionType" value="core" checked>
+                                <label for="subTypeCore">
+                                    <h3>Core-based</h3>
+                                    <p>1 subscription per 2 physical cores.</p>
+                                </label>
+                            </div>
+                            <div class="radio-option" onclick="selectSubscriptionType('socket', this)">
+                                <input type="radio" id="subTypeSocket" name="subscriptionType" value="socket">
+                                <label for="subTypeSocket">
+                                    <h3>Bare-metal (Socket-based)</h3>
+                                    <p>Up to 128 cores & 2 sockets per subscription.</p>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Logging Storage Configuration -->
+                    <div class="logging-storage-section">
+                        <div class="logging-storage-header" onclick="toggleLoggingStorageSection()">
+                            <span>💾 Logging Storage Configuration</span>
+                            <span id="storageToggle">▼</span>
+                        </div>
+                        <div class="logging-storage-content" id="storageContent">
+                            <div class="storage-inputs">
+                                <div class="form-group">
+                                    <label for="logVolumePerPod">Log Volume per Pod (MB/day): <span class="info-tooltip" title="Average log volume generated per pod per day">?</span></label>
+                                    <input type="number" id="logVolumePerPod" value="100" min="1" onchange="saveInputsToLocalStorage()">
+                                </div>
+                                <div class="form-group">
+                                    <label for="logRetentionDays">Log Retention (Days): <span class="info-tooltip" title="How long to keep logs before deletion">?</span></label>
+                                    <input type="number" id="logRetentionDays" value="30" min="1" max="365" onchange="saveInputsToLocalStorage()">
+                                </div>
+                                <div class="form-group">
+                                    <label for="compressionRatio">Compression Ratio: <span class="info-tooltip" title="Log compression factor (2 = 50% compression)">?</span></label>
+                                    <input type="number" id="compressionRatio" value="3" min="1" max="10" step="0.1" onchange="saveInputsToLocalStorage()">
+                                </div>
+                                <div class="form-group">
+                                    <label for="replicationFactor">Replication Factor: <span class="info-tooltip" title="Number of copies for HA (Elasticsearch only)">?</span></label>
+                                    <input type="number" id="replicationFactor" value="1" min="1" max="3" onchange="saveInputsToLocalStorage()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Growth Projection Module -->
+                    <div class="growth-section">
+                        <div class="growth-header" onclick="toggleGrowthSection()">
+                            <span>📈 Growth Projection</span>
+                            <span id="growthToggle">▼</span>
+                        </div>
+                        <div class="growth-content" id="growthContent">
+                            <div class="form-group">
+                                <div class="checkbox-item">
+                                    <input type="checkbox" id="enableGrowth" onchange="toggleGrowthInputs(); saveInputsToLocalStorage();">
+                                    <label for="enableGrowth">Enable Growth Projections</label>
+                                </div>
+                            </div>
+                            <div id="growthInputs" style="display: none;">
+                                <div class="growth-inputs">
+                                    <div class="form-group">
+                                        <label for="growthRate">Annual Growth Rate (%):</label>
+                                        <input type="number" id="growthRate" value="50" min="0" max="200" step="1" onchange="saveInputsToLocalStorage()">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="projectionMonths">Projection Period (Months):</label>
+                                        <input type="number" id="projectionMonths" value="12" min="1" max="60" onchange="saveInputsToLocalStorage()">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="btn-container">
+                        <button class="calculate-btn" onclick="calculateResources()">🔢 Calculate Resources</button>
+                        <button class="export-btn" onclick="exportToExcel()" id="exportBtn" style="display: none;">📊 Export to Excel</button>
+                        <button class="reset-btn" onclick="resetToDefaults()" title="Reset all inputs to default values">🔄 Reset</button>
+                    </div>
+                </div>
+
+                <div id="capacity-estimator-inputs" style="display: none;">
+                    <h3 style="margin: 30px 0 20px 0; color: #333;">🏗️ Step 1: Define Your Infrastructure</h3>
+                    <div class="form-group">
+                        <label for="capacityWorkerNodes">Number of Worker Nodes:</label>
+                        <input type="number" id="capacityWorkerNodes" value="3" min="1" onchange="saveInputsToLocalStorage()">
+                    </div>
+                    <div class="form-group">
+                        <label for="capacityCpuCores">Physical CPU Cores per Node:</label>
+                        <input type="number" id="capacityCpuCores" value="8" min="1" onchange="saveInputsToLocalStorage()">
+                    </div>
+                    <div class="form-group">
+                        <label for="capacityMemoryPerNode">Memory per Node (GB):</label>
+                        <input type="number" id="capacityMemoryPerNode" value="32" min="1" onchange="saveInputsToLocalStorage()">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="capacityCustomizeSockets" onchange="toggleCapacitySocketInput(); saveInputsToLocalStorage();">
+                            <label for="capacityCustomizeSockets">Customize Sockets per Node (Default: 2)</label>
+                        </div>
+                        <input type="number" id="capacitySocketsPerNode" value="2" min="1" style="display: none; margin-top: 10px;" onchange="saveInputsToLocalStorage()">
+                    </div>
+
+                    <!-- Subscription Type Selection -->
+                    <div class="form-group">
+                        <label>OpenShift Subscription Type:</label>
+                        <div class="radio-group" id="capacity-subscription-type-selector">
+                            <div class="radio-option selected" onclick="selectSubscriptionType('core', this)">
+                                <input type="radio" id="capSubTypeCore" name="capacitySubscriptionType" value="core" checked>
+                                <label for="capSubTypeCore">
+                                    <h3>Core-based</h3>
+                                    <p>1 subscription per 2 physical cores.</p>
+                                </label>
+                            </div>
+                            <div class="radio-option" onclick="selectSubscriptionType('socket', this)">
+                                <input type="radio" id="capSubTypeSocket" name="capacitySubscriptionType" value="socket">
+                                <label for="capSubTypeSocket">
+                                    <h3>Bare-metal (Socket-based)</h3>
+                                    <p>Up to 128 cores & 2 sockets per subscription.</p>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="btn-container">
+                        <button class="calculate-btn" onclick="calculateCapacity()">🔍 Estimate Capacity</button>
+                        <button class="reset-btn" onclick="resetToDefaults()" title="Reset all inputs to default values">🔄 Reset</button>
+                    </div>
                 </div>
             </div>
 
@@ -744,29 +891,76 @@
         let selectedLoggingStack = 'elasticsearch';
         let workloadCounter = 0;
         let workloads = [];
+        let currentMode = 'sizing';
+        let selectedSubscriptionType = 'core';
+        const LOCAL_STORAGE_KEY = 'openShiftSizingCalculatorInputs';
+
+        const WORKLOAD_PRESETS = {
+            container: { name: 'Typical Container', vcpu: 0.5, memory: 1 },
+            vm: { name: 'Typical VM', vcpu: 2, memory: 4 }
+        };
 
         // Initialize with one default workload
         function initializeWorkloads() {
-            addWorkload('Web Applications', 100, 0.5, 1);
+            if (workloads.length === 0) {
+                addWorkload();
+            }
         }
 
-        function selectLoggingStack(stack) {
+        /**
+         * @description Handles the selection of the subscription type.
+         * @param {string} type - The selected subscription type ('core' or 'socket').
+         * @param {HTMLElement} element - The clicked radio option element.
+         */
+        function selectSubscriptionType(type, element) {
+            if (element.classList.contains('disabled')) {
+                return;
+            }
+            selectedSubscriptionType = type;
+            
+            // Update UI selection
+            element.parentElement.querySelectorAll('.radio-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            element.classList.add('selected');
+            element.querySelector('input[type="radio"]').checked = true;
+            saveInputsToLocalStorage();
+        }
+
+        function selectLoggingStack(stack, element) {
             selectedLoggingStack = stack;
             
             // Update UI
-            document.querySelectorAll('.radio-option').forEach(option => {
+            element.parentElement.querySelectorAll('.radio-option').forEach(option => {
                 option.classList.remove('selected');
             });
-            
-            event.currentTarget.classList.add('selected');
+            element.classList.add('selected');
             
             // Update radio button
-            document.querySelector(`input[value="${stack}"]`).checked = true;
+            element.querySelector('input[type="radio"]').checked = true;
+            saveInputsToLocalStorage();
         }
 
-        function toggleCheckbox(id) {
-            const checkbox = document.getElementById(id);
-            checkbox.checked = !checkbox.checked;
+        function toggleSocketInput() {
+            const customizeSockets = document.getElementById('customizeSockets').checked;
+            const socketInput = document.getElementById('socketsPerNode');
+            
+            socketInput.style.display = customizeSockets ? 'block' : 'none';
+            
+            if (!customizeSockets) {
+                socketInput.value = 2; // Reset to default when hiding
+            }
+        }
+
+        function toggleCapacitySocketInput() {
+            const customizeSockets = document.getElementById('capacityCustomizeSockets').checked;
+            const socketInput = document.getElementById('capacitySocketsPerNode');
+            
+            socketInput.style.display = customizeSockets ? 'block' : 'none';
+            
+            if (!customizeSockets) {
+                socketInput.value = 2; // Reset to default when hiding
+            }
         }
 
         function toggleLoggingStorageSection() {
@@ -801,9 +995,17 @@
             growthInputs.style.display = enableGrowth ? 'block' : 'none';
         }
 
-        function addWorkload(name = '', instances = 50, vcpu = 0.5, memory = 1) {
+        function addWorkload(workload = null) {
             workloadCounter++;
             const workloadId = `workload-${workloadCounter}`;
+            
+            const isNew = !workload;
+            const type = isNew ? 'container' : workload.type;
+            const preset = WORKLOAD_PRESETS[type];
+            const name = isNew ? preset.name : workload.name;
+            const instances = isNew ? 50 : workload.instances;
+            const vcpu = isNew ? preset.vcpu : workload.vcpu;
+            const memory = isNew ? preset.memory : workload.memory;
             
             const workloadHTML = `
                 <div class="workload-item" id="${workloadId}">
@@ -811,25 +1013,50 @@
                     <div class="workload-inputs">
                         <div class="workload-field">
                             <label>Workload Name</label>
-                            <input type="text" placeholder="e.g., Web Applications" value="${name}" data-field="name">
+                            <input type="text" placeholder="e.g., Web Applications" value="${name}" data-field="name" onchange="updateWorkloads()">
+                        </div>
+                        <div class="workload-field">
+                            <label>Type</label>
+                            <select data-field="type" onchange="handleWorkloadTypeChange(this)">
+                                <option value="container" ${type === 'container' ? 'selected' : ''}>Container</option>
+                                <option value="vm" ${type === 'vm' ? 'selected' : ''}>VM</option>
+                            </select>
                         </div>
                         <div class="workload-field">
                             <label>Instances</label>
-                            <input type="number" placeholder="100" value="${instances}" min="1" data-field="instances">
+                            <input type="number" placeholder="100" value="${instances}" min="1" data-field="instances" onchange="updateWorkloads()">
                         </div>
                         <div class="workload-field">
                             <label>vCPU/Instance</label>
-                            <input type="number" placeholder="0.5" value="${vcpu}" min="0.1" step="0.1" data-field="vcpu">
+                            <input type="number" placeholder="0.5" value="${vcpu}" min="0.1" step="0.1" data-field="vcpu" onchange="updateWorkloads()">
                         </div>
                         <div class="workload-field">
                             <label>Memory/Instance (GB)</label>
-                            <input type="number" placeholder="1.0" value="${memory}" min="0.1" step="0.1" data-field="memory">
+                            <input type="number" placeholder="1.0" value="${memory}" min="0.1" step="0.1" data-field="memory" onchange="updateWorkloads()">
                         </div>
                     </div>
                 </div>
             `;
             
             document.getElementById('workloads-container').insertAdjacentHTML('beforeend', workloadHTML);
+            if (isNew) {
+                updateWorkloads();
+            }
+        }
+        
+        function handleWorkloadTypeChange(selectElement) {
+            const workloadItem = selectElement.closest('.workload-item');
+            if (!workloadItem) return;
+
+            const type = selectElement.value;
+            const preset = WORKLOAD_PRESETS[type];
+
+            if (preset) {
+                workloadItem.querySelector('[data-field="name"]').value = preset.name;
+                workloadItem.querySelector('[data-field="vcpu"]').value = preset.vcpu;
+                workloadItem.querySelector('[data-field="memory"]').value = preset.memory;
+            }
+
             updateWorkloads();
         }
 
@@ -843,15 +1070,87 @@
             const workloadElements = document.querySelectorAll('.workload-item');
             
             workloadElements.forEach(element => {
-                const inputs = element.querySelectorAll('input');
                 const workload = {
-                    name: inputs[0].value || 'Unnamed Workload',
-                    instances: parseInt(inputs[1].value) || 0,
-                    vcpu: parseFloat(inputs[2].value) || 0,
-                    memory: parseFloat(inputs[3].value) || 0
+                    name: element.querySelector('[data-field="name"]').value || 'Unnamed Workload',
+                    type: element.querySelector('[data-field="type"]').value,
+                    instances: parseInt(element.querySelector('[data-field="instances"]').value) || 0,
+                    vcpu: parseFloat(element.querySelector('[data-field="vcpu"]').value) || 0,
+                    memory: parseFloat(element.querySelector('[data-field="memory"]').value) || 0
                 };
                 workloads.push(workload);
             });
+            checkSubscriptionForVmWorkloads();
+            saveInputsToLocalStorage();
+        }
+
+        function checkSubscriptionForVmWorkloads() {
+            const hasVmWorkload = workloads.some(w => w.type === 'vm');
+            const subscriptionSelector = document.getElementById('subscription-type-selector');
+            const coreOption = subscriptionSelector.querySelector('div[onclick*="\'core\'"]');
+            const socketOption = subscriptionSelector.querySelector('div[onclick*="\'socket\'"]');
+
+            // Remove existing warning message if any
+            const existingWarning = document.getElementById('vm-subscription-warning');
+            if (existingWarning) {
+                existingWarning.remove();
+            }
+
+            // Use classList to enable/disable the core option
+            coreOption.classList.toggle('disabled', hasVmWorkload);
+            coreOption.querySelector('input').disabled = hasVmWorkload;
+
+            if (hasVmWorkload) {
+                // Force selection to socket-based
+                selectSubscriptionType('socket', socketOption);
+
+                // Add a warning message
+                const warningHTML = `
+                    <div id="vm-subscription-warning" class="warning" style="margin-top: 15px;">
+                        💡 OpenShift Virtualization (VMs) requires a Bare-metal (Socket-based) subscription. The subscription type has been automatically selected.
+                    </div>
+                `;
+                subscriptionSelector.insertAdjacentHTML('afterend', warningHTML);
+            }
+        }
+
+        /**
+         * @description Calculates the required OpenShift subscriptions based on the cluster size and subscription model.
+         * @param {string} type - The subscription type ('core' or 'socket').
+         * @param {number} billableNodes - The number of nodes that count towards subscription (i.e., worker nodes).
+         * @param {number} cpuCoresPerNode - The number of physical CPU cores per node.
+         * @param {number} socketsPerNode - The number of physical sockets per node.
+         * @returns {object} An object containing the subscription calculation details.
+         */
+        function calculateSubscriptions(type, billableNodes, cpuCoresPerNode, socketsPerNode) {
+            const totalPhysicalCores = billableNodes * cpuCoresPerNode;
+            const totalSockets = billableNodes * socketsPerNode;
+            let subscriptions = 0;
+            let calculationMethod = '';
+
+            if (type === 'core') {
+                // Core-based: 1 subscription per 2 physical cores.
+                subscriptions = Math.ceil(totalPhysicalCores / 2);
+                calculationMethod = `Core-based: ${totalPhysicalCores} total billable cores / 2 cores per subscription.`;
+            } else if (type === 'socket') {
+                // Bare-metal (Socket-based): The greater of (sockets/2) or (cores/128).
+                const subsBySockets = Math.ceil(totalSockets / 2);
+                const subsByCores = Math.ceil(totalPhysicalCores / 128);
+                subscriptions = Math.max(subsBySockets, subsByCores);
+                
+                if (subsByCores > subsBySockets) {
+                    calculationMethod = `Bare-metal (Core-limited): ${totalPhysicalCores} total billable cores / 128 cores per subscription.`;
+                } else {
+                    calculationMethod = `Bare-metal (Socket-limited): ${totalSockets} total billable sockets / 2 sockets per subscription.`;
+                }
+            }
+
+            return {
+                count: subscriptions,
+                type: type === 'core' ? 'Core-based' : 'Bare-metal (Socket-based)',
+                totalPhysicalCores,
+                totalSockets,
+                calculationMethod
+            };
         }
 
         function calculateCpuReservation(totalCpuCores) {
@@ -1002,27 +1301,47 @@
                 large: { memory: 50, cpu: 15, storage: 800 }
             };
 
+            const sizeCategory = getInfrastructureSizeCategory(stack, clusterSize);
+            const logging = loggingInfra[stack][sizeCategory];
+            const mon = monitoring[sizeCategory];
+            return { totalMemory: logging.memory + mon.memory, totalCpu: logging.cpu + mon.cpu, totalStorage: logging.storage + mon.storage, loggingMemory: logging.memory, monitoringMemory: mon.memory };
+        }
+
+        function getInfrastructureSizeCategory(stack, clusterSize) {
+            const loggingInfra = {
+                elasticsearch: {
+                    small: { memory: 49, cpu: 10, storage: 800 },
+                    medium: { memory: 125, cpu: 15, storage: 2000 },
+                    large: { memory: 280, cpu: 30, storage: 4000 }
+                },
+                loki: {
+                    small: { memory: 16, cpu: 10, storage: 300 },
+                    medium: { memory: 25, cpu: 18, storage: 600 },
+                    large: { memory: 47, cpu: 35, storage: 1200 }
+                }
+            };
+
+            const monitoring = {
+                small: { memory: 10.6, cpu: 5, storage: 200 },
+                medium: { memory: 25, cpu: 8, storage: 400 },
+                large: { memory: 50, cpu: 15, storage: 800 }
+            };
+
             let sizeCategory;
             if (clusterSize < 50) sizeCategory = 'small';
             else if (clusterSize < 250) sizeCategory = 'medium';
             else sizeCategory = 'large';
 
-            const logging = loggingInfra[stack][sizeCategory];
-            const mon = monitoring[sizeCategory];
-
-            return {
-                totalMemory: logging.memory + mon.memory,
-                totalCpu: logging.cpu + mon.cpu,
-                totalStorage: logging.storage + mon.storage,
-                loggingMemory: logging.memory,
-                monitoringMemory: mon.memory,
-                recommendedNodes: sizeCategory === 'small' ? 3 : sizeCategory === 'medium' ? 3 : 6
-            };
+            return sizeCategory;
         }
 
         function calculateGrowthProjections(baseWorkloads, annualGrowthRate, months, usableVcpuPerNode, usableMemoryPerNode, maxUtilization, currentWorkerNodes) {
             const projections = [];
             const maxUtilizationPercent = maxUtilization * 100;
+
+            // Derive total available resources per node for accurate utilization reporting
+            const availableVcpuPerNode = usableVcpuPerNode / maxUtilization;
+            const availableMemoryPerNode = usableMemoryPerNode / maxUtilization;
             
             // Convert annual growth rate to monthly growth rate
             const monthlyGrowthRate = Math.pow(1 + (annualGrowthRate / 100), 1/12) - 1;
@@ -1030,6 +1349,8 @@
             let firstUrgentMonth = null;
             let firstWarningMonth = null;
             let firstCautionMonth = null;
+
+            let workerNodesForMonth = currentWorkerNodes; // Start with the initial node count
             
             for (let month = 0; month <= months; month++) {
                 const growthFactor = month === 0 ? 1 : Math.pow(1 + monthlyGrowthRate, month);
@@ -1042,27 +1363,23 @@
                 const totalInstances = projectedWorkloads.reduce((sum, w) => sum + w.instances, 0);
                 const totalVcpu = projectedWorkloads.reduce((sum, w) => sum + (w.instances * w.vcpu), 0);
                 const totalMemory = projectedWorkloads.reduce((sum, w) => sum + (w.instances * w.memory), 0);
-                
-                // Use current worker nodes as starting point for month 0, then calculate optimal
-                let optimalWorkerNodes;
-                if (month === 0) {
-                    optimalWorkerNodes = currentWorkerNodes;
-                } else {
-                    const nodesForCpu = Math.ceil(totalVcpu / usableVcpuPerNode);
-                    const nodesForMemory = Math.ceil(totalMemory / usableMemoryPerNode);
-                    optimalWorkerNodes = Math.max(nodesForCpu, nodesForMemory, 3); // minimum 3 for HA
-                }
-                
-                // Calculate utilization with current nodes (or optimal for month 0)
-                const availableVcpu = optimalWorkerNodes * usableVcpuPerNode;
-                const availableMemory = optimalWorkerNodes * usableMemoryPerNode;
-                
-                const cpuUtilization = (totalVcpu / availableVcpu) * 100;
-                const memoryUtilization = (totalMemory / availableMemory) * 100;
+
+                // Calculate utilization based on the nodes available at the start of the month
+                const totalAvailableVcpu = workerNodesForMonth * availableVcpuPerNode;
+                const totalAvailableMemory = workerNodesForMonth * availableMemoryPerNode;
+
+                const cpuUtilization = (totalVcpu / totalAvailableVcpu) * 100;
+                const memoryUtilization = (totalMemory / totalAvailableMemory) * 100;
                 const maxCurrentUtilization = Math.max(cpuUtilization, memoryUtilization);
                 
-                // Determine if expansion is needed
+                // Determine if expansion is needed for the *next* month
                 const needsExpansion = maxCurrentUtilization > maxUtilizationPercent;
+                let optimalNodesForNextMonth = workerNodesForMonth;
+                if (needsExpansion) {
+                    const nodesForCpu = Math.ceil(totalVcpu / usableVcpuPerNode);
+                    const nodesForMemory = Math.ceil(totalMemory / usableMemoryPerNode);
+                    optimalNodesForNextMonth = Math.max(nodesForCpu, nodesForMemory, 3);
+                }
                 
                 // Calculate growth from previous month
                 let utilizationGrowth = 0;
@@ -1102,7 +1419,8 @@
                     totalInstances: totalInstances,
                     totalVcpu: totalVcpu,
                     totalMemory: totalMemory,
-                    optimalWorkerNodes: optimalWorkerNodes,
+                    workerNodesInMonth: workerNodesForMonth,
+                    recommendedNodesForNextMonth: optimalNodesForNextMonth,
                     cpuUtilization: cpuUtilization,
                     memoryUtilization: memoryUtilization,
                     maxUtilization: maxCurrentUtilization,
@@ -1111,8 +1429,11 @@
                     recommendation: recommendation,
                     showRecommendation: showRecommendation,
                     growthFactor: growthFactor,
-                    monthlyGrowthRate: monthlyGrowthRate * 100 // Store as percentage for display
+                    monthlyGrowthRate: monthlyGrowthRate * 100
                 });
+
+                // Set the node count for the next iteration
+                workerNodesForMonth = optimalNodesForNextMonth;
             }
             
             return projections;
@@ -1137,17 +1458,15 @@
                 ['Cluster Summary'],
                 ['Worker Nodes Required:', calc.finalWorkerNodes],
                 ['Master Nodes:', calc.mergeMasters ? '0 (merged)' : calc.masterNodes],
-                ['Infrastructure Nodes:', calc.mergeInfra ? '0 (merged)' : calc.infraNodes],
+                ['Dedicated Infrastructure:', calc.infraReqs.totalCpu > 0 ? 'User-defined resource pool' : 'None'],
                 ['Total Cluster Size:', calc.totalClusterNodes],
-                ['Configuration:', calc.mergeMasters && calc.mergeInfra ? 'Compact cluster (Masters + Infrastructure merged)' : 
-                                  calc.mergeMasters ? 'Compact cluster (Masters merged)' : 
-                                  calc.mergeInfra ? 'Infrastructure merged' : 'Dedicated nodes'],
+                ['Configuration:', calc.mergeMasters ? 'Compact cluster (Masters merged)' : 'Dedicated nodes'],
                 [''],
                 ['Workload Requirements'],
                 ['Total Application Instances:', calc.totalInstances],
                 ['Total vCPU Needed:', calc.totalVcpuNeeded.toFixed(1)],
                 ['Total Memory Needed (GB):', calc.totalMemoryNeeded.toFixed(1)],
-                ['Logging Stack:', selectedLoggingStack === 'elasticsearch' ? 'Elasticsearch' : 'LokiStack'],
+                ['Logging Stack:', calc.selectedLoggingStack === 'elasticsearch' ? 'Elasticsearch' : 'LokiStack'],
                 [''],
                 ['Worker Node Capacity'],
                 ['Physical CPU Cores:', calc.cpuCores],
@@ -1159,6 +1478,21 @@
                 ['CPU Utilization (%):', calc.actualCpuUtilization.toFixed(1)],
                 ['Memory Utilization (%):', calc.actualMemoryUtilization.toFixed(1)],
                 ['Max Utilization Target (%):', calc.maxUtilization],
+                [''],
+                ['Subscription Requirements'],
+                ['Model:', calc.subscriptionInfo.type],
+                ['Billable Nodes (Workers):', calc.finalWorkerNodes],
+                ['Total Billable Cores:', calc.subscriptionInfo.totalPhysicalCores],
+                ...(calc.subscriptionInfo.type === 'Bare-metal (Socket-based)' ? 
+                    [['Total Billable Sockets:', calc.subscriptionInfo.totalSockets]] : 
+                    []),
+                ['Required Subscriptions:', calc.subscriptionInfo.count],
+                ['Calculation:', calc.subscriptionInfo.calculationMethod],
+                [''],
+                ['Calculated Infrastructure Requirements'],
+                ['Total Infra CPU (Cores):', calc.infraReqs.totalCpu.toFixed(1)],
+                ['Total Infra Memory (GB):', calc.infraReqs.totalMemory.toFixed(1)],
+                ['Total Infra Storage (GB):', calc.infraReqs.totalStorage.toFixed(1)],
                 [''],
                 ['Log Storage Requirements'],
                 ['Total Pods Generating Logs:', calc.logStorage.totalPods],
@@ -1201,7 +1535,7 @@
                     ['Annual Growth Rate (%):', annualGrowthRate],
                     ['Equivalent Monthly Growth Rate (%):', monthlyGrowthRate.toFixed(3)],
                     [''],
-                    ['Month', 'Total Instances', 'Total vCPU', 'Total Memory (GB)', 'Optimal Nodes', 'CPU Utilization (%)', 'Memory Utilization (%)', 'Max Utilization (%)', 'Utilization Growth (%)', 'Recommendation', 'Show Alert']
+                    ['Month', 'Total Instances', 'Total vCPU', 'Total Memory (GB)', 'Nodes in Month', 'CPU Utilization (%)', 'Memory Utilization (%)', 'Max Utilization (%)', 'Utilization Growth (%)', 'Recommendation', 'Show Alert']
                 ];
                 
                 calc.growthProjections.forEach(proj => {
@@ -1210,7 +1544,7 @@
                         proj.totalInstances,
                         proj.totalVcpu.toFixed(1),
                         proj.totalMemory.toFixed(1),
-                        proj.optimalWorkerNodes,
+                        proj.workerNodesInMonth,
                         proj.cpuUtilization.toFixed(1),
                         proj.memoryUtilization.toFixed(1),
                         proj.maxUtilization.toFixed(1),
@@ -1356,13 +1690,13 @@
             // Get worker node specifications
             const cpuCores = parseInt(document.getElementById('cpuCores').value);
             const cpuToVcpuRatio = parseFloat(document.getElementById('cpuToVcpuRatio').value);
+            const socketsPerNode = parseInt(document.getElementById('socketsPerNode').value);
             const memoryPerNode = parseInt(document.getElementById('memoryPerNode').value);
             const maxUtilization = parseInt(document.getElementById('maxUtilization').value) / 100;
             
             // Get merge options
             const mergeMasters = document.getElementById('mergeMasters').checked;
-            const mergeInfra = document.getElementById('mergeInfra').checked;
-
+            
             // Calculate worker node capacity
             const totalVcpuPerNode = cpuCores * cpuToVcpuRatio;
             
@@ -1402,24 +1736,18 @@
             let finalWorkerNodes = baseWorkerNodes;
             let iterations = 0;
             const maxIterations = 10;
+            let infraReqs = {};
             
             while (iterations < maxIterations) {
                 const loggingOverhead = getLoggingOverhead(selectedLoggingStack, finalWorkerNodes);
                 
-                // Total requirements including logging overhead
-                let totalVcpuWithLogging = totalVcpuNeeded + loggingOverhead.totalCpu;
-                let totalMemoryWithLogging = totalMemoryNeeded + loggingOverhead.totalMemory;
+                // Calculate infra requirements based on current estimated cluster size
+                const currentClusterSize = (mergeMasters ? 0 : 3) + finalWorkerNodes;
+                infraReqs = getInfrastructureRequirements(selectedLoggingStack, currentClusterSize);
                 
-                // Add infrastructure overhead if merged
-                let infraOverhead = { cpu: 0, memory: 0 };
-                if (mergeInfra) {
-                    const totalClusterNodesEstimate = 3 + finalWorkerNodes; // masters + workers
-                    const infraReqs = getInfrastructureRequirements(selectedLoggingStack, totalClusterNodesEstimate);
-                    infraOverhead.cpu = infraReqs.totalCpu;
-                    infraOverhead.memory = infraReqs.totalMemory;
-                    totalVcpuWithLogging += infraReqs.totalCpu;
-                    totalMemoryWithLogging += infraReqs.totalMemory;
-                }
+                // Total requirements including logging and infra overhead
+                let totalVcpuWithLogging = totalVcpuNeeded + loggingOverhead.totalCpu + infraReqs.totalCpu;
+                let totalMemoryWithLogging = totalMemoryNeeded + loggingOverhead.totalMemory + infraReqs.totalMemory;
                 
                 // Calculate new worker node requirements
                 const newNodesForCpu = Math.ceil(totalVcpuWithLogging / usableVcpuPerNode);
@@ -1428,9 +1756,6 @@
                 
                 // Ensure minimum nodes for merged configurations
                 if (mergeMasters) {
-                    newWorkerNodes = Math.max(newWorkerNodes, 3);
-                }
-                if (mergeInfra) {
                     newWorkerNodes = Math.max(newWorkerNodes, 3);
                 }
                 
@@ -1444,29 +1769,25 @@
 
             // Calculate final cluster size
             const masterNodes = mergeMasters ? 0 : 3;
-            const infraNodes = mergeInfra ? 0 : 3;
-            const totalClusterNodes = masterNodes + infraNodes + finalWorkerNodes;
+            // Infra nodes are now explicitly defined by user input, not calculated as part of the primary cluster node count.
+            // The 'infraNodes' variable here will represent the count of *dedicated* infra nodes if the user specifies them,
+            // but for the purpose of 'totalClusterNodes' (which influences logging/monitoring sizing), we only count masters and workers.
+            const totalClusterNodes = masterNodes + finalWorkerNodes;
             
-            // Get infrastructure requirements
-            const infraReqs = getInfrastructureRequirements(selectedLoggingStack, totalClusterNodes);
+            // Calculate subscription requirements based on worker nodes only
+            const subscriptionInfo = calculateSubscriptions(selectedSubscriptionType, finalWorkerNodes, cpuCores, socketsPerNode);
+
+            // Recalculate final infra requirements based on the converged node count
+            const finalInfraReqs = getInfrastructureRequirements(selectedLoggingStack, totalClusterNodes);
+
+            // Note: getLoggingOverhead already uses workerNodes, not totalClusterNodes for per-node overhead
             const finalLoggingOverhead = getLoggingOverhead(selectedLoggingStack, finalWorkerNodes);
             
             // Calculate final overhead
-            let finalInfraOverhead = { cpu: 0, memory: 0 };
-            if (mergeInfra) {
-                finalInfraOverhead.cpu = infraReqs.totalCpu;
-                finalInfraOverhead.memory = infraReqs.totalMemory;
-            }
-            
+            const finalInfraOverhead = { cpu: finalInfraReqs.totalCpu, memory: finalInfraReqs.totalMemory };
             // Calculate actual utilization
             let totalVcpuWithLogging = totalVcpuNeeded + finalLoggingOverhead.totalCpu + finalInfraOverhead.cpu;
             let totalMemoryWithLogging = totalMemoryNeeded + finalLoggingOverhead.totalMemory + finalInfraOverhead.memory;
-            
-            // Account for master overhead in utilization calculation
-            if (mergeMasters) {
-                totalVcpuWithLogging += masterOverhead.cpu * finalWorkerNodes;
-                totalMemoryWithLogging += masterOverhead.memory * finalWorkerNodes;
-            }
             
             const actualCpuUtilization = (totalVcpuWithLogging / (finalWorkerNodes * availableVcpuPerNode)) * 100;
             const actualMemoryUtilization = (totalMemoryWithLogging / (finalWorkerNodes * availableMemoryPerNode)) * 100;
@@ -1497,6 +1818,7 @@
                 logStorage,
                 cpuCores,
                 cpuToVcpuRatio,
+                socketsPerNode,
                 totalVcpuPerNode,
                 memoryPerNode,
                 cpuReservation,
@@ -1507,9 +1829,9 @@
                 usableMemoryPerNode,
                 finalWorkerNodes,
                 masterNodes,
-                infraNodes,
-                totalClusterNodes,
-                infraReqs,
+                infraNodes: 0, // Dedicated infra nodes are now a resource pool, not counted in this 'nodes' variable
+                totalClusterNodes, // This is the final converged infra requirements
+                infraReqs: finalInfraReqs,
                 finalLoggingOverhead,
                 actualCpuUtilization,
                 actualMemoryUtilization,
@@ -1517,10 +1839,10 @@
                 totalVcpuWithLogging,
                 totalMemoryWithLogging,
                 mergeMasters,
-                mergeInfra,
                 masterOverhead,
-                finalInfraOverhead,
-                growthProjections
+                finalInfraOverhead, // This is now correctly defined and passed
+                growthProjections,
+                subscriptionInfo
             };
 
             // Display results
@@ -1530,80 +1852,98 @@
         function displayResults(calc) {
             const resultsContainer = document.getElementById('results-container');
             
-            let clusterConfigText = '';
-            if (calc.mergeMasters && calc.mergeInfra) {
-                clusterConfigText = 'Compact cluster (Masters + Infrastructure merged with Workers)';
-            } else if (calc.mergeMasters) {
-                clusterConfigText = 'Compact cluster (Masters merged with Workers)';
-            } else if (calc.mergeInfra) {
-                clusterConfigText = 'Infrastructure merged with Workers';
-            } else {
-                clusterConfigText = 'Dedicated nodes configuration';
-            }
-
-            // Create workload breakdown
-            let workloadBreakdown = '';
-            calc.workloads.forEach(workload => {
-                const totalVcpu = workload.instances * workload.vcpu;
-                const totalMemory = workload.instances * workload.memory;
-                workloadBreakdown += `
-                    <div class="breakdown-item">
-                        <span>${workload.name} (${workload.instances} instances):</span>
-                        <span>${totalVcpu.toFixed(1)} vCPUs, ${totalMemory.toFixed(1)} GB</span>
-                    </div>
-                `;
-            });
+            const isOverutilized = calc.actualCpuUtilization > calc.maxUtilization || calc.actualMemoryUtilization > calc.maxUtilization;
+            const utilizationStatusMessage = isOverutilized ? 
+                '<div class="warning">⚠️ Warning: Resource utilization exceeds target. Consider adding more nodes or using larger ones.</div>' : 
+                '<div class="success">✅ Allocation looks good! All utilization targets are met.</div>';
 
             let resultsHTML = `
-                <div class="result-card">
-                    <h3>🎯 Cluster Summary</h3>
+                <div class="result-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                    <h3>🔑 Key Recommendations</h3>
                     <div class="result-item">
-                        <span>Worker Nodes Required:</span>
-                        <span class="result-value">${calc.finalWorkerNodes} nodes</span>
+                        <span><span class="status-icon">#️⃣</span>Worker Nodes Required:</span>
+                        <span class="result-value" style="font-size: 1.5rem;">${calc.finalWorkerNodes}</span>
+                    </div>
+                     <div class="result-item">
+                        <span><span class="status-icon">🎟️</span>Required Subscriptions:</span>
+                        <span class="result-value" style="font-size: 1.5rem;">${calc.subscriptionInfo.count}</span>
                     </div>
                     <div class="result-item">
-                        <span>Master Nodes:</span>
-                        <span class="result-value">${calc.mergeMasters ? '0 (merged)' : calc.masterNodes + ' nodes'}</span>
+                        <span><span class="status-icon">${isOverutilized ? '⚠️' : '✅'}</span>Cluster Utilization:</span>
+                        <span class="result-value">CPU: ${calc.actualCpuUtilization.toFixed(1)}% | Mem: ${calc.actualMemoryUtilization.toFixed(1)}%</span>
                     </div>
-                    <div class="result-item">
-                        <span>Infrastructure Nodes:</span>
-                        <span class="result-value">${calc.mergeInfra ? '0 (merged)' : calc.infraNodes + ' nodes'}</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Total Cluster Size:</span>
-                        <span class="result-value">${calc.totalClusterNodes} nodes</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Configuration:</span>
-                        <span class="result-value">${clusterConfigText}</span>
-                    </div>
+                    ${utilizationStatusMessage}
                 </div>
 
                 <div class="result-card">
-                    <h3>💻 Workload Requirements</h3>
-                    <div class="result-item">
-                        <span>Total Application Instances:</span>
-                        <span class="result-value">${calc.totalInstances}</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Total vCPU Needed:</span>
-                        <span class="result-value">${calc.totalVcpuNeeded.toFixed(1)} vCPUs</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Total Memory Needed:</span>
-                        <span class="result-value">${calc.totalMemoryNeeded.toFixed(1)} GB</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Workload Types:</span>
-                        <span class="result-value">${calc.workloads.length} types</span>
+                    <h3>🏗️ Cluster Profile & Node Configuration</h3>
+                    <div class="result-item"><span>Total Worker Nodes:</span><span class="result-value">${calc.finalWorkerNodes}</span></div>
+                    <div class="result-item"><span>Total Master Nodes:</span><span class="result-value">${calc.mergeMasters ? '0 (merged)' : calc.masterNodes}</span></div>
+                    <div class="result-item"><span>Configuration:</span><span class="result-value">${calc.mergeMasters ? 'Compact' : 'Dedicated Masters'}</span></div>
+                    
+                    <div class="breakdown-section" style="margin-top: 20px; background: rgba(255,255,255,0.1);">
+                        <div class="breakdown-title" style="color: white;">Single Worker Node Profile</div>
+                        <div class="breakdown-item"><span>Physical Capacity</span><span>${calc.cpuCores} Cores / ${calc.memoryPerNode} GB RAM</span></div>
+                        <div class="breakdown-item"><span>(-) OS/System Reservation</span><span>-${calc.cpuReservation.toFixed(2)} Cores / -${calc.memoryReservation.toFixed(1)} GB RAM</span></div>
+                        ${calc.mergeMasters ? `<div class="breakdown-item"><span>(-) Master Services Overhead</span><span>-${calc.masterOverhead.cpu} vCPUs / -${calc.masterOverhead.memory} GB RAM</span></div>` : ''}
+                        <div class="breakdown-item"><span>(-) Logging Agent Overhead</span><span>-${calc.finalLoggingOverhead.cpuPerNode.toFixed(2)} vCPUs / -${calc.finalLoggingOverhead.memoryPerNode.toFixed(2)} GB RAM</span></div>
+                        <div class="breakdown-item" style="border-top: 2px solid white; font-weight: bold;"><span>(=) Available for Workloads</span><span>${(calc.availableVcpuPerNode + (calc.mergeMasters ? calc.masterOverhead.cpu : 0)).toFixed(2)} vCPUs / ${(calc.availableMemoryPerNode + (calc.mergeMasters ? calc.masterOverhead.memory : 0)).toFixed(1)} GB RAM</span></div>
+                        <div class="breakdown-item"><span>(×) Max Utilization Target</span><span>${calc.maxUtilization}%</span></div>
+                        <div class="breakdown-item" style="border-top: 2px solid white; font-weight: bold; background: rgba(0,0,0,0.2);"><span>(=) Usable Capacity per Node</span><span>${calc.usableVcpuPerNode.toFixed(2)} vCPUs / ${calc.usableMemoryPerNode.toFixed(1)} GB RAM</span></div>
                     </div>
                 </div>
 
-                <div class="breakdown-section">
-                    <div class="breakdown-title">📊 Workload Breakdown</div>
-                    ${workloadBreakdown}
+                <div class="result-card">
+                    <h3>💻 Total Resource Demand</h3>
+                    <div class="breakdown-section" style="background: rgba(255,255,255,0.1);">
+                        <div class="breakdown-title" style="color: white;">Application Workloads</div>
+                        ${calc.workloads.map(w => `
+                            <div class="breakdown-item">
+                                <span>${w.name} (${w.instances} x ${w.type})</span>
+                                <span>${(w.instances * w.vcpu).toFixed(1)} vCPUs / ${(w.instances * w.memory).toFixed(1)} GB</span>
+                            </div>
+                        `).join('')}
+                        <div class="breakdown-item" style="border-top: 2px solid white; font-weight: bold;">
+                            <span>Subtotal:</span>
+                            <span>${calc.totalVcpuNeeded.toFixed(1)} vCPUs / ${calc.totalMemoryNeeded.toFixed(1)} GB</span>
+                        </div>
+                    </div>
+                    <div class="breakdown-section" style="margin-top: 15px; background: rgba(255,255,255,0.1);">
+                        <div class="breakdown-title" style="color: white;">Cluster Services Overhead</div>
+                        <div class="breakdown-item"><span>Logging, Monitoring, etc.</span><span>${calc.finalInfraOverhead.cpu.toFixed(1)} vCPUs / ${calc.finalInfraOverhead.memory.toFixed(1)} GB</span></div>
+                    </div>
+                     <div class="result-item" style="margin-top: 15px;">
+                        <span><strong>Total Required Capacity:</strong></span>
+                        <span class="result-value">${calc.totalVcpuWithLogging.toFixed(1)} vCPUs / ${calc.totalMemoryWithLogging.toFixed(1)} GB</span>
+                    </div>
                 </div>
 
+                <div class="result-card">
+                    <h3>🎟️ OpenShift Subscription Estimate</h3>
+                    <div class="result-item">
+                        <span>Subscription Model:</span>
+                        <span class="result-value">${calc.subscriptionInfo.type}</span>
+                    </div>
+                    <div class="result-item">
+                        <span>Total Billable Physical Cores (on ${calc.finalWorkerNodes} worker nodes):</span>
+                        <span class="result-value">${calc.subscriptionInfo.totalPhysicalCores} cores</span>
+                    </div>
+                    ${calc.subscriptionInfo.type === 'Bare-metal (Socket-based)' ? `
+                    <div class="result-item">
+                        <span>Total Billable Sockets (on ${calc.finalWorkerNodes} worker nodes):</span>
+                        <span class="result-value">${calc.subscriptionInfo.totalSockets} sockets</span>
+                    </div>
+                    ` : ''}
+                    <div class="result-item">
+                        <span><strong>Required Subscriptions:</strong></span>
+                        <span class="result-value" style="font-size: 1.5rem;">${calc.subscriptionInfo.count}</span>
+                    </div>
+                    <div class="warning" style="margin-top: 15px; padding: 10px; text-align: center; background: rgba(0,0,0,0.2);">
+                        💡 <strong>Calculation:</strong> ${calc.subscriptionInfo.calculationMethod}
+                    </div>
+                </div>`;
+
+            resultsHTML += `
                 <div class="storage-breakdown">
                     <h3>💾 Log Storage Requirements</h3>
                     <div class="result-item">
@@ -1615,20 +1955,8 @@
                         <span class="result-value">${(calc.logStorage.dailyRawLogVolumeMB / 1024).toFixed(1)} GB/day</span>
                     </div>
                     <div class="result-item">
-                        <span>Compressed + Infrastructure Logs:</span>
-                        <span class="result-value">${(calc.logStorage.totalLogVolumeMB / 1024).toFixed(1)} GB</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Total Storage Required:</span>
+                        <span>Total Storage Required (incl. retention, compression):</span>
                         <span class="result-value">${calc.logStorage.finalStorageRequirementGB.toFixed(1)} GB</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Retention Period:</span>
-                        <span class="result-value">${calc.logStorage.retentionDays} days</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Compression Ratio:</span>
-                        <span class="result-value">${calc.logStorage.compressionRatio}:1</span>
                     </div>
                     ${selectedLoggingStack === 'elasticsearch' ? `
                     <div class="result-item">
@@ -1637,114 +1965,8 @@
                     </div>
                     ` : ''}
                 </div>
-
-                <div class="result-card">
-                    <h3>⚙️ Worker Node Capacity</h3>
-                    <div class="result-item">
-                        <span>Physical CPU Cores:</span>
-                        <span class="result-value">${calc.cpuCores} cores</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Total vCPUs per Node:</span>
-                        <span class="result-value">${calc.totalVcpuPerNode} vCPUs</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Available vCPUs (after OS):</span>
-                        <span class="result-value">${calc.availableVcpuPerNode.toFixed(2)} vCPUs</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Available Memory (after OS):</span>
-                        <span class="result-value">${calc.availableMemoryPerNode.toFixed(1)} GB</span>
-                    </div>
-                </div>
-
-                <div class="breakdown-section">
-                    <div class="breakdown-title">📊 Resource Breakdown</div>
-                    <div class="breakdown-item">
-                        <span>OpenShift CPU Reservation:</span>
-                        <span>${calc.cpuReservation.toFixed(3)} cores (${((calc.cpuReservation/calc.cpuCores)*100).toFixed(1)}%)</span>
-                    </div>
-                    <div class="breakdown-item">
-                        <span>OpenShift Memory Reservation:</span>
-                        <span>${calc.memoryReservation.toFixed(1)} GB (${((calc.memoryReservation/calc.memoryPerNode)*100).toFixed(1)}%)</span>
-                    </div>
             `;
 
-            if (calc.mergeMasters) {
-                resultsHTML += `
-                    <div class="breakdown-item">
-                        <span>Master Services Overhead:</span>
-                        <span>${calc.masterOverhead.cpu} vCPUs, ${calc.masterOverhead.memory} GB per node</span>
-                    </div>
-                `;
-            }
-
-            if (calc.mergeInfra) {
-                resultsHTML += `
-                    <div class="breakdown-item">
-                        <span>Infrastructure Services Overhead:</span>
-                        <span>${calc.finalInfraOverhead.cpu} vCPUs, ${calc.finalInfraOverhead.memory} GB total</span>
-                    </div>
-                `;
-            }
-
-            resultsHTML += `
-                    <div class="breakdown-item">
-                        <span>Logging Overhead per Node:</span>
-                        <span>${calc.finalLoggingOverhead.memoryPerNode.toFixed(2)} GB memory, ${(calc.finalLoggingOverhead.cpuPerNode*1000).toFixed(0)}m CPU</span>
-                    </div>
-                    <div class="breakdown-item">
-                        <span>Total Logging Overhead:</span>
-                        <span>${calc.finalLoggingOverhead.totalMemory.toFixed(1)} GB memory, ${calc.finalLoggingOverhead.totalCpu.toFixed(1)} vCPUs</span>
-                    </div>
-                </div>
-            `;
-
-            if (!calc.mergeInfra) {
-                resultsHTML += `
-                    <div class="result-card">
-                        <h3>🏗️ Infrastructure Requirements</h3>
-                        <div class="result-item">
-                            <span>Infrastructure Memory:</span>
-                            <span class="result-value">${calc.infraReqs.totalMemory} GB</span>
-                        </div>
-                        <div class="result-item">
-                            <span>Infrastructure CPU:</span>
-                            <span class="result-value">${calc.infraReqs.totalCpu} cores</span>
-                        </div>
-                        <div class="result-item">
-                            <span>Infrastructure Storage:</span>
-                            <span class="result-value">${calc.infraReqs.totalStorage} GB</span>
-                        </div>
-                        <div class="result-item">
-                            <span>Recommended Infra Nodes:</span>
-                            <span class="result-value">${calc.infraReqs.recommendedNodes} nodes</span>
-                        </div>
-                    </div>
-                `;
-            }
-
-            resultsHTML += `
-                <div class="result-card">
-                    <h3>📈 Utilization Analysis</h3>
-                    <div class="result-item">
-                        <span>CPU Utilization:</span>
-                        <span class="result-value">${calc.actualCpuUtilization.toFixed(1)}%</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Memory Utilization:</span>
-                        <span class="result-value">${calc.actualMemoryUtilization.toFixed(1)}%</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Max Utilization Target:</span>
-                        <span class="result-value">${calc.maxUtilization}%</span>
-                    </div>
-                    <div class="result-item">
-                        <span>Total Resources + Overhead:</span>
-                        <span class="result-value">${calc.totalVcpuWithLogging.toFixed(1)} vCPUs, ${calc.totalMemoryWithLogging.toFixed(1)} GB</span>
-                    </div>
-                </div>
-            `;
 
             // Growth projections
             if (calc.growthProjections) {
@@ -1795,11 +2017,11 @@
                             <h4>📊 Growth Summary</h4>
                             <div class="projection-item">
                                 <span>Total Instance Growth:</span>
-                                <span>${totalGrowth}%</span>
+                                <span class="result-value">${totalGrowth}%</span>
                             </div>
                             <div class="projection-item">
                                 <span>Final Utilization:</span>
-                                <span>${finalUtilization.toFixed(1)}%</span>
+                                <span class="result-value">${finalUtilization.toFixed(1)}%</span>
                             </div>
                             <div class="projection-item">
                                 <span>Utilization Increase:</span>
@@ -1826,17 +2048,20 @@
                     else if (firstCriticalRecommendation.recommendation.includes('CAUTION')) statusClass = 'status-caution';
                     else statusClass = 'status-ok';
 
-                    const nodesNeeded = firstCriticalRecommendation.optimalWorkerNodes - calc.finalWorkerNodes;
+                    const nodesNeeded = firstCriticalRecommendation.recommendedNodesForNextMonth - firstCriticalRecommendation.workerNodesInMonth;
 
                     resultsHTML += `
                         <div class="recommendation-item">
                             <span>Month ${firstCriticalRecommendation.month}: ${firstCriticalRecommendation.maxUtilization.toFixed(1)}% utilization</span>
                             <span class="recommendation-status ${statusClass}">${firstCriticalRecommendation.recommendation}</span>
-                        </div>
-                        <div class="recommendation-item">
-                            <span>Recommended Action:</span>
-                            <span class="result-value">Add ${nodesNeeded > 0 ? nodesNeeded : 'additional'} worker node(s)</span>
-                        </div>
+                        </div>`;
+                    if (nodesNeeded > 0) {
+                        resultsHTML += `<div class="recommendation-item">
+                                <span>Recommended Action:</span>
+                                <span class="result-value">Add ${nodesNeeded} worker node(s)</span>
+                            </div>`;
+                    }
+                    resultsHTML += `
                         <div class="recommendation-item">
                             <span>Target Instances at that time:</span>
                             <span class="result-value">${firstCriticalRecommendation.totalInstances} instances</span>
@@ -1854,10 +2079,6 @@
                 resultsHTML += '</div>';
             }
 
-            resultsHTML += (calc.actualCpuUtilization > calc.maxUtilization || calc.actualMemoryUtilization > calc.maxUtilization) ? 
-                '<div class="warning">⚠️ Warning: Resource utilization exceeds target threshold. Consider increasing worker node capacity or adding more nodes.</div>' : 
-                '<div class="success">✅ Resource allocation looks good! All utilization targets are met.</div>';
-
             resultsContainer.innerHTML = resultsHTML;
 
             // Create growth chart if projections exist
@@ -1871,10 +2092,380 @@
             document.getElementById('exportBtn').style.display = 'inline-flex';
         }
 
+        function saveInputsToLocalStorage() {
+            // Collect all sizing inputs
+            const sizingInputs = {
+                workloads: workloads, // 'workloads' global variable is already up-to-date
+                cpuCores: document.getElementById('cpuCores').value,
+                customizeSockets: document.getElementById('customizeSockets').checked,
+                socketsPerNode: document.getElementById('socketsPerNode').value,
+                cpuToVcpuRatio: document.getElementById('cpuToVcpuRatio').value,
+                memoryPerNode: document.getElementById('memoryPerNode').value,
+                maxUtilization: document.getElementById('maxUtilization').value,
+                mergeMasters: document.getElementById('mergeMasters').checked,
+                loggingStack: selectedLoggingStack,
+                subscriptionType: selectedSubscriptionType,
+                logVolumePerPod: document.getElementById('logVolumePerPod').value,
+                logRetentionDays: document.getElementById('logRetentionDays').value,
+                compressionRatio: document.getElementById('compressionRatio').value,
+                replicationFactor: document.getElementById('replicationFactor').value,
+                enableGrowth: document.getElementById('enableGrowth').checked,
+                growthRate: document.getElementById('growthRate').value,
+                projectionMonths: document.getElementById('projectionMonths').value,
+            };
+
+            // Collect all capacity inputs
+            const capacityInputs = {
+                capacityWorkerNodes: document.getElementById('capacityWorkerNodes').value,
+                capacityCpuCores: document.getElementById('capacityCpuCores').value,
+                capacityMemoryPerNode: document.getElementById('capacityMemoryPerNode').value,
+                capacityCustomizeSockets: document.getElementById('capacityCustomizeSockets').checked,
+                capacitySocketsPerNode: document.getElementById('capacitySocketsPerNode').value,
+                // The subscription type is shared, but let's read it from its own context
+                capacitySubscriptionType: document.querySelector('input[name="capacitySubscriptionType"]:checked').value,
+            };
+
+            const dataToSave = {
+                mode: currentMode,
+                sizing: sizingInputs,
+                capacity: capacityInputs
+            };
+
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
+        }
+
+        function loadInputsFromLocalStorage() {
+            const savedDataJSON = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (!savedDataJSON) {
+                initializeWorkloads(); // If no saved data, just start with a default workload
+                return;
+            }
+
+            try {
+                const savedData = JSON.parse(savedDataJSON);
+
+                // Restore mode
+                const modeSelector = document.getElementById('mode-selector');
+                const modeOption = modeSelector.querySelector(`div[onclick*="'${savedData.mode}'"]`);
+                if (modeOption) {
+                    switchMode(savedData.mode, modeOption);
+                }
+
+                // Restore Sizing Inputs
+                const sizing = savedData.sizing;
+                if (sizing) {
+                    document.getElementById('cpuCores').value = sizing.cpuCores;
+                    document.getElementById('customizeSockets').checked = sizing.customizeSockets;
+                    document.getElementById('socketsPerNode').value = sizing.socketsPerNode;
+                    toggleSocketInput(); // Update visibility
+                    document.getElementById('cpuToVcpuRatio').value = sizing.cpuToVcpuRatio;
+                    document.getElementById('memoryPerNode').value = sizing.memoryPerNode;
+                    document.getElementById('maxUtilization').value = sizing.maxUtilization;
+                    document.getElementById('mergeMasters').checked = sizing.mergeMasters;
+
+                    const logStackOption = document.querySelector(`div[onclick*="'${sizing.loggingStack}'"]`);
+                    if (logStackOption) selectLoggingStack(sizing.loggingStack, logStackOption);
+
+                    const subTypeOption = document.querySelector(`#subscription-type-selector div[onclick*="'${sizing.subscriptionType}'"]`);
+                    if (subTypeOption) selectSubscriptionType(sizing.subscriptionType, subTypeOption);
+
+                    document.getElementById('logVolumePerPod').value = sizing.logVolumePerPod;
+                    document.getElementById('logRetentionDays').value = sizing.logRetentionDays;
+                    document.getElementById('compressionRatio').value = sizing.compressionRatio;
+                    document.getElementById('replicationFactor').value = sizing.replicationFactor;
+
+                    document.getElementById('enableGrowth').checked = sizing.enableGrowth;
+                    toggleGrowthInputs(); // Update visibility
+                    document.getElementById('growthRate').value = sizing.growthRate;
+                    document.getElementById('projectionMonths').value = sizing.projectionMonths;
+
+                    // Restore workloads
+                    document.getElementById('workloads-container').innerHTML = '';
+                    workloadCounter = 0;
+                    workloads = [];
+                    if (sizing.workloads && sizing.workloads.length > 0) {
+                        sizing.workloads.forEach(workload => {
+                            addWorkload(workload);
+                        });
+                        updateWorkloads(); // This will update the global 'workloads' array and check for VM subscription requirements
+                    } else {
+                        addWorkload(); // Add a default one if none were saved
+                    }
+                }
+
+                // Restore Capacity Inputs
+                const capacity = savedData.capacity;
+                if (capacity) {
+                    document.getElementById('capacityWorkerNodes').value = capacity.capacityWorkerNodes;
+                    document.getElementById('capacityCpuCores').value = capacity.capacityCpuCores;
+                    document.getElementById('capacityMemoryPerNode').value = capacity.capacityMemoryPerNode;
+                    document.getElementById('capacityCustomizeSockets').checked = capacity.capacityCustomizeSockets;
+                    document.getElementById('capacitySocketsPerNode').value = capacity.capacitySocketsPerNode;
+                    toggleCapacitySocketInput(); // Update visibility
+
+                    const capSubTypeOption = document.querySelector(`#capacity-subscription-type-selector div[onclick*="'${capacity.capacitySubscriptionType}'"]`);
+                    if (capSubTypeOption) selectSubscriptionType(capacity.capacitySubscriptionType, capSubTypeOption);
+                }
+            } catch (e) {
+                console.error("Failed to load saved data, resetting to defaults.", e);
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                initializeWorkloads();
+            }
+        }
+
+        function switchMode(mode, element) {
+            currentMode = mode;
+            
+            document.getElementById('sizing-calculator-inputs').style.display = (mode === 'sizing') ? 'block' : 'none';
+            document.getElementById('capacity-estimator-inputs').style.display = (mode === 'capacity') ? 'block' : 'none';
+
+            // Update UI selection
+            element.parentElement.querySelectorAll('.radio-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            element.classList.add('selected');
+            element.querySelector('input[type="radio"]').checked = true;
+
+            // Clear results
+            document.getElementById('results-container').innerHTML = `
+                <div class="result-card">
+                    <h3>👋 Welcome!</h3>
+                    <p>Configure your options and click the button to see the results.</p>
+                </div>
+            `;
+            document.getElementById('exportBtn').style.display = 'none';
+            saveInputsToLocalStorage();
+        }
+
+        function resetToDefaults() {
+            if (!confirm('Are you sure you want to reset all inputs to their default values? This will clear any saved data.')) {
+                return;
+            }
+
+            // Clear local storage
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+
+            // Reset Sizing Inputs
+            document.getElementById('cpuCores').value = 8;
+            document.getElementById('customizeSockets').checked = false;
+            document.getElementById('socketsPerNode').value = 2;
+            toggleSocketInput();
+            document.getElementById('cpuToVcpuRatio').value = 2;
+            document.getElementById('memoryPerNode').value = 32;
+            document.getElementById('maxUtilization').value = 80;
+            document.getElementById('mergeMasters').checked = false;
+
+            selectLoggingStack('elasticsearch', document.querySelector('div[onclick*="\'elasticsearch\'"]'));
+            selectSubscriptionType('core', document.querySelector('#subscription-type-selector div[onclick*="\'core\'"]'));
+
+            document.getElementById('logVolumePerPod').value = 100;
+            document.getElementById('logRetentionDays').value = 30;
+            document.getElementById('compressionRatio').value = 3;
+            document.getElementById('replicationFactor').value = 1;
+
+            document.getElementById('enableGrowth').checked = false;
+            toggleGrowthInputs();
+            document.getElementById('growthRate').value = 50;
+            document.getElementById('projectionMonths').value = 12;
+
+            // Reset workloads
+            document.getElementById('workloads-container').innerHTML = '';
+            workloadCounter = 0;
+            workloads = [];
+            addWorkload();
+
+            // Reset Capacity Inputs
+            document.getElementById('capacityWorkerNodes').value = 3;
+            document.getElementById('capacityCpuCores').value = 8;
+            document.getElementById('capacityMemoryPerNode').value = 32;
+            document.getElementById('capacityCustomizeSockets').checked = false;
+            document.getElementById('capacitySocketsPerNode').value = 2;
+            toggleCapacitySocketInput();
+            selectSubscriptionType('core', document.querySelector('#capacity-subscription-type-selector div[onclick*="\'core\'"]'));
+
+            // Reset results
+            document.getElementById('results-container').innerHTML = `
+                <div class="result-card">
+                    <h3>👋 Welcome!</h3>
+                    <p>Inputs have been reset to default values.</p>
+                </div>
+            `;
+            document.getElementById('exportBtn').style.display = 'none';
+
+            alert('All inputs have been reset to their default values.');
+        }
+        
+        function calculateCapacity() {
+            // Get custom infrastructure values from inputs
+            const infra = {
+                workers: parseInt(document.getElementById('capacityWorkerNodes').value) || 0,
+                cpu: parseInt(document.getElementById('capacityCpuCores').value) || 0,
+                memory: parseInt(document.getElementById('capacityMemoryPerNode').value) || 0
+            };
+
+            if (infra.workers <= 0 || infra.cpu <= 0 || infra.memory <= 0) {
+                alert('Please enter valid, positive numbers for infrastructure specifications.');
+                return;
+            }
+
+            // Get subscription inputs
+            const socketsPerNode = parseInt(document.getElementById('capacitySocketsPerNode').value) || 2;
+            const subscriptionInfo = calculateSubscriptions(selectedSubscriptionType, infra.workers, infra.cpu, socketsPerNode);
+
+            const containerPreset = WORKLOAD_PRESETS.container;
+            const vmPreset = WORKLOAD_PRESETS.vm;
+
+            // --- Calculate Usable Resources ---
+            // These are assumptions for this simplified mode.
+            const cpuToVcpuRatio = 2; // Assuming hyperthreading
+            const maxUtilization = 0.80; // Assuming 80% target
+            const loggingStack = 'elasticsearch'; // Assuming ES
+
+            // Per-node calculations
+            const totalVcpuPerNode = infra.cpu * cpuToVcpuRatio;
+            const cpuReservation = calculateCpuReservation(infra.cpu);
+            const memoryReservation = calculateMemoryReservation(infra.memory);
+            
+            const availableVcpuPerNode = totalVcpuPerNode - cpuReservation;
+            const availableMemoryPerNode = infra.memory - memoryReservation;
+
+            // Total cluster resources available on workers
+            let totalAvailableVcpu = infra.workers * availableVcpuPerNode;
+            let totalAvailableMemory = infra.workers * availableMemoryPerNode;
+
+            // Subtract logging overhead from the total pool
+            const loggingOverhead = getLoggingOverhead(loggingStack, infra.workers);
+            totalAvailableVcpu -= loggingOverhead.totalCpu;
+            totalAvailableMemory -= loggingOverhead.totalMemory;
+
+            // Apply max utilization to get the final usable pool for workloads
+            const usableVcpu = totalAvailableVcpu * maxUtilization;
+            const usableMemory = totalAvailableMemory * maxUtilization;
+
+            // --- Calculate Capacity ---
+            const containerCapacityByCpu = Math.floor(usableVcpu / containerPreset.vcpu);
+            const containerCapacityByMem = Math.floor(usableMemory / containerPreset.memory);
+            const containerCapacity = Math.min(containerCapacityByCpu, containerCapacityByMem);
+
+            const vmCapacityByCpu = Math.floor(usableVcpu / vmPreset.vcpu);
+            const vmCapacityByMem = Math.floor(usableMemory / vmPreset.memory);
+            const vmCapacity = Math.min(vmCapacityByCpu, vmCapacityByMem);
+
+            const results = {
+                infra,
+                usableVcpu,
+                usableMemory,
+                containerPreset,
+                containerCapacity,
+                containerLimitingFactor: containerCapacityByCpu < containerCapacityByMem ? 'vCPU' : 'Memory',
+                vmPreset,
+                vmCapacity,
+                vmLimitingFactor: vmCapacityByCpu < vmCapacityByMem ? 'vCPU' : 'Memory',
+                subscriptionInfo
+            };
+
+            displayCapacityResults(results);
+        }
+
+        function displayCapacityResults(results) {
+            const resultsContainer = document.getElementById('results-container');
+
+            const resultsHTML = `
+                <div class="result-card">
+                    <h3>🎯 Custom Infrastructure Summary</h3>
+                    <div class="result-item">
+                        <span>Number of Worker Nodes:</span>
+                        <span class="result-value">${results.infra.workers} nodes</span>
+                    </div>
+                    <div class="result-item">
+                        <span>CPU Cores per Node:</span>
+                        <span class="result-value">${results.infra.cpu} Cores</span>
+                    </div>
+                    <div class="result-item">
+                        <span>Memory per Node:</span>
+                        <span class="result-value">${results.infra.memory} GB</span>
+                    </div>
+                    <div class="result-item">
+                        <span>Total Usable vCPU (for workloads):</span>
+                        <span class="result-value">${results.usableVcpu.toFixed(1)} vCPUs</span>
+                    </div>
+                    <div class="result-item">
+                        <span>Total Usable Memory (for workloads):</span>
+                        <span class="result-value">${results.usableMemory.toFixed(1)} GB</span>
+                    </div>
+                </div>
+
+                <div class="result-card">
+                    <h3>📦 Estimated Container Capacity</h3>
+                    <div class="result-item">
+                        <span>Assumed Container Size:</span>
+                        <span class="result-value">${results.containerPreset.vcpu} vCPU / ${results.containerPreset.memory} GB RAM</span>
+                    </div>
+                    <div class="result-item">
+                        <span><strong>Estimated Containers:</strong></span>
+                        <span class="result-value" style="font-size: 1.5rem;">~ ${results.containerCapacity}</span>
+                    </div>
+                    <div class="result-item">
+                        <span>Limiting Resource:</span>
+                        <span class="result-value">${results.containerLimitingFactor}</span>
+                    </div>
+                </div>
+
+                ${results.subscriptionInfo.type === 'Bare-metal (Socket-based)' ? `
+                    <div class="result-card">
+                        <h3>🖥️ Estimated VM Capacity (OpenShift Virtualization)</h3>
+                        <div class="result-item">
+                            <span>Assumed VM Size:</span>
+                            <span class="result-value">${results.vmPreset.vcpu} vCPU / ${results.vmPreset.memory} GB RAM</span>
+                        </div>
+                        <div class="result-item">
+                            <span><strong>Estimated VMs:</strong></span>
+                            <span class="result-value" style="font-size: 1.5rem;">~ ${results.vmCapacity}</span>
+                        </div>
+                        <div class="result-item">
+                            <span>Limiting Resource:</span>
+                            <span class="result-value">${results.vmLimitingFactor}</span>
+                        </div>
+                    </div>
+                ` : `<div class="warning">💡 <strong>VM Estimation Not Available:</strong> OpenShift Virtualization requires a socket-based subscription. Please select "Bare-metal (Socket-based)" to estimate VM capacity.</div>`}
+
+                <div class="result-card">
+                    <h3>🎟️ OpenShift Subscription Estimate</h3>
+                    <div class="result-item">
+                        <span>Subscription Model:</span>
+                        <span class="result-value">${results.subscriptionInfo.type}</span>
+                    </div>
+                    <div class="result-item">
+                        <span>Total Billable Physical Cores (on ${results.infra.workers} worker nodes):</span>
+                        <span class="result-value">${results.subscriptionInfo.totalPhysicalCores} cores</span>
+                    </div>
+                    ${results.subscriptionInfo.type === 'Bare-metal (Socket-based)' ? `
+                    <div class="result-item">
+                        <span>Total Billable Sockets (on ${results.infra.workers} worker nodes):</span>
+                        <span class="result-value">${results.subscriptionInfo.totalSockets} sockets</span>
+                    </div>
+                    ` : ''}
+                    <div class="result-item">
+                        <span><strong>Required Subscriptions:</strong></span>
+                        <span class="result-value" style="font-size: 1.5rem;">${results.subscriptionInfo.count}</span>
+                    </div>
+                    <div class="warning" style="margin-top: 15px; padding: 10px; text-align: center; background: rgba(0,0,0,0.2);">
+                        💡 <strong>Calculation:</strong> ${results.subscriptionInfo.calculationMethod}
+                    </div>
+                </div>
+
+                <div class="warning">
+                    💡 <strong>Note:</strong> These are estimates based on a standard OpenShift deployment with dedicated master/infra nodes and typical overhead. For precise calculations, use the Resource Sizing mode.
+                </div>
+            `;
+
+            resultsContainer.innerHTML = resultsHTML;
+            document.getElementById('exportBtn').style.display = 'none';
+        }
+
         // Initialize
         window.onload = function() {
-            initializeWorkloads();
-            calculateResources();
+            loadInputsFromLocalStorage();
         };
     </script>
 </body>
