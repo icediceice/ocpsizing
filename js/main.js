@@ -1,4 +1,5 @@
 let selectedLoggingStack = 'elasticsearch';
+let selectedCapacityLoggingStack = 'elasticsearch';
 let workloadCounter = 0;
 let workloads = [];
 let currentMode = 'capacity';
@@ -49,6 +50,33 @@ function selectLoggingStack(stack, element) {
     // Update radio button
     element.querySelector('input[type="radio"]').checked = true;
     saveInputsToLocalStorage();
+}
+
+function selectCapacityLoggingStack(stack, element) {
+    selectedCapacityLoggingStack = stack;
+    
+    // Update UI
+    element.parentElement.querySelectorAll('.radio-option').forEach(option => {
+        option.classList.remove('selected');
+    });
+    element.classList.add('selected');
+    
+    // Update radio button
+    element.querySelector('input[type="radio"]').checked = true;
+    saveInputsToLocalStorage();
+}
+
+function toggleCapacityUtilizationBuffer() {
+    const enableBuffer = document.getElementById('capacityEnableUtilizationBuffer').checked;
+    const bufferInputs = document.getElementById('capacityUtilizationBufferInputs');
+    
+    bufferInputs.style.display = enableBuffer ? 'block' : 'none';
+    
+    if (!enableBuffer) {
+        document.getElementById('capacityMaxUtilization').value = 100; // No buffer when disabled
+    } else {
+        document.getElementById('capacityMaxUtilization').value = 80; // Default buffer when enabled
+    }
 }
 
 function toggleSocketInput() {
@@ -365,11 +393,34 @@ function calculateLogStorageRequirements() {
     };
 }
 
-function getMasterNodeRequirements() {
-    // Master node resource requirements (per master)
+function getMasterNodeRequirements(workerNodeCount = 0) {
+    // Master node resource requirements based on cluster size
+    // Minimum 3 master nodes for HA
+    const masterCount = 3;
+    
+    // Resource requirements per master based on worker node count
+    let cpuPerMaster, memoryPerMaster;
+    
+    if (workerNodeCount <= 120) {
+        // Up to 120 worker nodes: 8 cores / 16GB per master
+        cpuPerMaster = 8;
+        memoryPerMaster = 16;
+    } else if (workerNodeCount <= 252) {
+        // 121-252 worker nodes: 16 cores / 32GB per master
+        cpuPerMaster = 16;
+        memoryPerMaster = 32;
+    } else {
+        // Over 252 worker nodes: higher requirements (custom sizing needed)
+        cpuPerMaster = 24;
+        memoryPerMaster = 48;
+    }
+    
     return {
-        cpu: 2, // 2 vCPUs per master
-        memory: 8 // 8 GB per master
+        count: masterCount,
+        cpu: cpuPerMaster, // vCPUs per master
+        memory: memoryPerMaster, // GB per master
+        totalCpu: masterCount * cpuPerMaster,
+        totalMemory: masterCount * memoryPerMaster
     };
 }
 
@@ -567,7 +618,10 @@ function exportToExcel() {
         [''],
         ['Cluster Summary'],
         ['Worker Nodes Required:', calc.finalWorkerNodes],
-        ['Master Nodes:', calc.mergeMasters ? '0 (merged)' : calc.masterNodes],
+        ['Master Nodes:', calc.mergeMasters ? '0 (merged)' : calc.masterNodeRequirements.count],
+        ['Master CPU per Node (cores):', calc.mergeMasters ? 'N/A' : calc.masterNodeRequirements.cpu],
+        ['Master Memory per Node (GB):', calc.mergeMasters ? 'N/A' : calc.masterNodeRequirements.memory],
+        ['Total Master Resources:', calc.mergeMasters ? 'N/A' : `${calc.masterNodeRequirements.totalCpu} cores / ${calc.masterNodeRequirements.totalMemory} GB`],
         ['Dedicated Infrastructure:', calc.infraReqs.totalCpu > 0 ? 'User-defined resource pool' : 'None'],
         ['Total Cluster Size:', calc.totalClusterNodes],
         ['Configuration:', calc.mergeMasters ? 'Compact cluster (Masters merged)' : 'Dedicated nodes'],
@@ -818,50 +872,61 @@ function calculateResources() {
     let availableVcpuPerNode = totalVcpuPerNode - cpuReservation;
     let availableMemoryPerNode = memoryPerNode - memoryReservation;
     
-    // Account for master node requirements if merged
-    let masterOverhead = { cpu: 0, memory: 0 };
-    if (mergeMasters) {
-        const masterReqs = getMasterNodeRequirements();
-        masterOverhead.cpu = masterReqs.cpu;
-        masterOverhead.memory = masterReqs.memory;
-        availableVcpuPerNode -= masterReqs.cpu;
-        availableMemoryPerNode -= masterReqs.memory;
-    }
-    
-    // Calculate usable resources considering max utilization
-    const usableVcpuPerNode = availableVcpuPerNode * maxUtilization;
-    const usableMemoryPerNode = availableMemoryPerNode * maxUtilization;
-    
-    // Calculate worker nodes needed (before logging overhead)
-    const nodesForCpu = Math.ceil(totalVcpuNeeded / usableVcpuPerNode);
-    const nodesForMemory = Math.ceil(totalMemoryNeeded / usableMemoryPerNode);
-    let baseWorkerNodes = Math.max(nodesForCpu, nodesForMemory);
-    
-    // For merged masters, ensure minimum 3 nodes for HA
-    if (mergeMasters) {
-        baseWorkerNodes = Math.max(baseWorkerNodes, 3);
-    }
-    
-    // Account for logging overhead and recalculate
-    let finalWorkerNodes = baseWorkerNodes;
+    // Calculate worker nodes needed with iterative approach to handle master overhead
+    let finalWorkerNodes = 3; // Start with minimum for compact clusters
     let iterations = 0;
-    const maxIterations = 10;
+    const maxIterations = 15;
     let infraReqs = {};
+    let masterOverhead = { cpu: 0, memory: 0 };
     
     while (iterations < maxIterations) {
+        // Recalculate master overhead based on current worker count estimate
+        if (mergeMasters) {
+            const currentMasterReqs = getMasterNodeRequirements(finalWorkerNodes);
+            // In compact mode, master services consume a fixed amount of cluster resources
+            // This is the total resources that would be needed for 3 dedicated masters
+            masterOverhead.cpu = currentMasterReqs.count * currentMasterReqs.cpu; // Total CPU for all masters
+            masterOverhead.memory = currentMasterReqs.count * currentMasterReqs.memory; // Total memory for all masters
+        } else {
+            masterOverhead.cpu = 0;
+            masterOverhead.memory = 0;
+        }
+        
+        // Calculate usable resources per node (after system reservations only)
+        const availableAfterSystem = {
+            cpu: availableVcpuPerNode,
+            memory: availableMemoryPerNode
+        };
+        
+        const usableVcpuPerNode = Math.max(0, availableAfterSystem.cpu * maxUtilization);
+        const usableMemoryPerNode = Math.max(0, availableAfterSystem.memory * maxUtilization);
+        
+        // Check if we have enough resources per node
+        if (usableVcpuPerNode <= 0 || usableMemoryPerNode <= 0) {
+            // Not enough resources on a single node, this configuration is not viable
+            alert('Error: Node specifications are too small. Please increase node specifications.');
+            return;
+        }
+        
         const loggingOverhead = getLoggingOverhead(selectedLoggingStack, finalWorkerNodes);
         
         // Calculate infra requirements based on current estimated cluster size
         const currentClusterSize = (mergeMasters ? 0 : 3) + finalWorkerNodes;
         infraReqs = getInfrastructureRequirements(selectedLoggingStack, currentClusterSize);
         
-        // Total requirements including logging and infra overhead
-        let totalVcpuWithLogging = totalVcpuNeeded + loggingOverhead.totalCpu + infraReqs.totalCpu;
-        let totalMemoryWithLogging = totalMemoryNeeded + loggingOverhead.totalMemory + infraReqs.totalMemory;
+        // Total requirements including logging, infra, and master overhead
+        let totalVcpuWithOverhead = totalVcpuNeeded + loggingOverhead.totalCpu + infraReqs.totalCpu;
+        let totalMemoryWithOverhead = totalMemoryNeeded + loggingOverhead.totalMemory + infraReqs.totalMemory;
+        
+        // Add master overhead to total requirements (fixed cluster overhead)
+        if (mergeMasters) {
+            totalVcpuWithOverhead += masterOverhead.cpu;
+            totalMemoryWithOverhead += masterOverhead.memory;
+        }
         
         // Calculate new worker node requirements
-        const newNodesForCpu = Math.ceil(totalVcpuWithLogging / usableVcpuPerNode);
-        const newNodesForMemory = Math.ceil(totalMemoryWithLogging / usableMemoryPerNode);
+        const newNodesForCpu = Math.ceil(totalVcpuWithOverhead / usableVcpuPerNode);
+        const newNodesForMemory = Math.ceil(totalMemoryWithOverhead / usableMemoryPerNode);
         let newWorkerNodes = Math.max(newNodesForCpu, newNodesForMemory);
         
         // Ensure minimum nodes for merged configurations
@@ -876,12 +941,22 @@ function calculateResources() {
         finalWorkerNodes = newWorkerNodes;
         iterations++;
     }
+    
+    // Final calculation of usable resources with converged values
+    if (mergeMasters) {
+        const finalMasterReqs = getMasterNodeRequirements(finalWorkerNodes);
+        // Master overhead is fixed total cluster resources (not per node)
+        masterOverhead.cpu = finalMasterReqs.count * finalMasterReqs.cpu;
+        masterOverhead.memory = finalMasterReqs.count * finalMasterReqs.memory;
+    }
+    
+    const finalAvailableVcpuPerNode = availableVcpuPerNode;
+    const finalAvailableMemoryPerNode = availableMemoryPerNode;
+    const finalUsableVcpuPerNode = finalAvailableVcpuPerNode * maxUtilization;
+    const finalUsableMemoryPerNode = finalAvailableMemoryPerNode * maxUtilization;
 
     // Calculate final cluster size
     const masterNodes = mergeMasters ? 0 : 3;
-    // Infra nodes are now explicitly defined by user input, not calculated as part of the primary cluster node count.
-    // The 'infraNodes' variable here will represent the count of *dedicated* infra nodes if the user specifies them,
-    // but for the purpose of 'totalClusterNodes' (which influences logging/monitoring sizing), we only count masters and workers.
     const totalClusterNodes = masterNodes + finalWorkerNodes;
     
     // Calculate subscription requirements based on worker nodes only
@@ -889,18 +964,15 @@ function calculateResources() {
 
     // Recalculate final infra requirements based on the converged node count
     const finalInfraReqs = getInfrastructureRequirements(selectedLoggingStack, totalClusterNodes);
-
-    // Note: getLoggingOverhead already uses workerNodes, not totalClusterNodes for per-node overhead
     const finalLoggingOverhead = getLoggingOverhead(selectedLoggingStack, finalWorkerNodes);
     
-    // Calculate final overhead
-    const finalInfraOverhead = { cpu: finalInfraReqs.totalCpu, memory: finalInfraReqs.totalMemory };
-    // Calculate actual utilization
-    let totalVcpuWithLogging = totalVcpuNeeded + finalLoggingOverhead.totalCpu + finalInfraOverhead.cpu;
-    let totalMemoryWithLogging = totalMemoryNeeded + finalLoggingOverhead.totalMemory + finalInfraOverhead.memory;
+    // Calculate total requirements with final values
+    let totalVcpuWithLogging = totalVcpuNeeded + finalLoggingOverhead.totalCpu + finalInfraReqs.totalCpu;
+    let totalMemoryWithLogging = totalMemoryNeeded + finalLoggingOverhead.totalMemory + finalInfraReqs.totalMemory;
     
-    const actualCpuUtilization = (totalVcpuWithLogging / (finalWorkerNodes * availableVcpuPerNode)) * 100;
-    const actualMemoryUtilization = (totalMemoryWithLogging / (finalWorkerNodes * availableMemoryPerNode)) * 100;
+    // Calculate actual utilization using final available resources (including master overhead)
+    const actualCpuUtilization = (totalVcpuWithLogging / (finalWorkerNodes * finalAvailableVcpuPerNode)) * 100;
+    const actualMemoryUtilization = (totalMemoryWithLogging / (finalWorkerNodes * finalAvailableMemoryPerNode)) * 100;
 
     // Growth projections
     let growthProjections = null;
@@ -912,13 +984,16 @@ function calculateResources() {
             workloads, 
             annualGrowthRate, 
             projectionMonths, 
-            usableVcpuPerNode, 
-            usableMemoryPerNode, 
+            finalUsableVcpuPerNode, 
+            finalUsableMemoryPerNode, 
             maxUtilization,
             finalWorkerNodes
         );
     }
 
+    // Calculate final master node requirements based on final worker count
+    const finalMasterReqs = getMasterNodeRequirements(finalWorkerNodes);
+    
     // Store results for export
     window.lastCalculationResults = {
         workloads,
@@ -933,14 +1008,15 @@ function calculateResources() {
         memoryPerNode,
         cpuReservation,
         memoryReservation,
-        availableVcpuPerNode: availableVcpuPerNode + (mergeMasters ? masterOverhead.cpu : 0),
-        availableMemoryPerNode: availableMemoryPerNode + (mergeMasters ? masterOverhead.memory : 0),
-        usableVcpuPerNode,
-        usableMemoryPerNode,
+        availableVcpuPerNode: finalAvailableVcpuPerNode,
+        availableMemoryPerNode: finalAvailableMemoryPerNode,
+        usableVcpuPerNode: finalUsableVcpuPerNode,
+        usableMemoryPerNode: finalUsableMemoryPerNode,
         finalWorkerNodes,
         masterNodes,
-        infraNodes: 0, // Dedicated infra nodes are now a resource pool, not counted in this 'nodes' variable
-        totalClusterNodes, // This is the final converged infra requirements
+        masterNodeRequirements: finalMasterReqs,
+        infraNodes: 0,
+        totalClusterNodes,
         infraReqs: finalInfraReqs,
         finalLoggingOverhead,
         actualCpuUtilization,
@@ -950,7 +1026,7 @@ function calculateResources() {
         totalMemoryWithLogging,
         mergeMasters,
         masterOverhead,
-        finalInfraOverhead, // This is now correctly defined and passed
+        finalInfraOverhead: { cpu: finalInfraReqs.totalCpu, memory: finalInfraReqs.totalMemory },
         growthProjections,
         subscriptionInfo
     };
@@ -988,16 +1064,53 @@ function displayResults(calc) {
         <div class="result-card">
             <h3><i class="icon-export"></i> Cluster Profile & Node Configuration</h3>
             <div class="result-item"><span>Total Worker Nodes:</span><span class="result-value">${calc.finalWorkerNodes}</span></div>
-            <div class="result-item"><span>Total Master Nodes:</span><span class="result-value">${calc.mergeMasters ? '0 (merged)' : calc.masterNodes}</span></div>
-            <div class="result-item"><span>Configuration:</span><span class="result-value">${calc.mergeMasters ? 'Compact' : 'Dedicated Masters'}</span></div>
+            <div class="result-item"><span>Total Master Nodes:</span><span class="result-value">${calc.mergeMasters ? '0 (merged)' : calc.masterNodeRequirements.count}</span></div>
+            <div class="result-item"><span>Configuration:</span><span class="result-value">${calc.mergeMasters ? 'Compact Cluster' : 'Dedicated Masters'}</span></div>
+            
+            ${!calc.mergeMasters ? `
+            <div class="breakdown-section" style="margin-top: 15px; background: rgba(74, 144, 226, 0.1); border-left: 4px solid #4a90e2;">
+                <div class="breakdown-title" style="color: #4a90e2;"><i class="icon-settings"></i> Master Node Recommendations</div>
+                <div class="breakdown-item"><span>Recommended Master Count:</span><span>${calc.masterNodeRequirements.count} nodes (for HA)</span></div>
+                <div class="breakdown-item"><span>CPU per Master:</span><span>${calc.masterNodeRequirements.cpu} cores</span></div>
+                <div class="breakdown-item"><span>Memory per Master:</span><span>${calc.masterNodeRequirements.memory} GB</span></div>
+                <div class="breakdown-item" style="font-weight: bold; border-top: 1px solid #4a90e2;"><span>Total Master Resources:</span><span>${calc.masterNodeRequirements.totalCpu} cores / ${calc.masterNodeRequirements.totalMemory} GB</span></div>
+                <div class="info-note" style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                    <i class="icon-info"></i> Master sizing based on ${calc.finalWorkerNodes} worker nodes
+                    ${calc.finalWorkerNodes <= 120 ? '(up to 120 workers: 8c/16GB per master)' : 
+                      calc.finalWorkerNodes <= 252 ? '(121-252 workers: 16c/32GB per master)' : 
+                      '(over 252 workers: contact Red Hat for custom sizing)'}
+                </div>
+            </div>
+            ` : `
+            <div class="breakdown-section" style="margin-top: 15px; background: rgba(156, 39, 176, 0.1); border-left: 4px solid #9c27b0;">
+                <div class="breakdown-title" style="color: #9c27b0;"><i class="icon-compress"></i> Compact Cluster Configuration</div>
+                <div class="breakdown-item"><span>Master Services on Workers:</span><span>Yes (Total: ${calc.masterOverhead.cpu} vCPUs / ${calc.masterOverhead.memory} GB cluster-wide)</span></div>
+                <div class="breakdown-item"><span>Minimum Worker Nodes:</span><span>3 (for HA master quorum)</span></div>
+                <div class="info-note" style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                    <i class="icon-info"></i> In compact mode, master services run on worker nodes, reducing infrastructure overhead but requiring minimum 3 nodes for HA.
+                </div>
+            </div>
+            
+            <div class="breakdown-section" style="margin-top: 15px; background: rgba(156, 39, 176, 0.1); border-left: 4px solid #9c27b0;">
+                <div class="breakdown-title" style="color: #9c27b0;"><i class="icon-cluster"></i> Cluster-Wide Resource Allocation</div>
+                <div class="breakdown-item"><span>Total Cluster CPU Capacity</span><span>${(calc.finalWorkerNodes * calc.totalVcpuPerNode).toFixed(2)} vCPUs</span></div>
+                <div class="breakdown-item"><span>Total Cluster Memory Capacity</span><span>${(calc.finalWorkerNodes * calc.memoryPerNode).toFixed(1)} GB</span></div>
+                <div class="breakdown-item"><span>(-) System Reservations</span><span>-${(calc.finalWorkerNodes * calc.cpuReservation).toFixed(2)} vCPUs / -${(calc.finalWorkerNodes * calc.memoryReservation).toFixed(1)} GB</span></div>
+                <div class="breakdown-item"><span>(-) Master Services (Fixed Overhead)</span><span>-${calc.masterOverhead.cpu.toFixed(2)} vCPUs / -${calc.masterOverhead.memory.toFixed(1)} GB</span></div>
+                <div class="breakdown-item"><span>(-) Logging Services</span><span>-${calc.finalLoggingOverhead.totalCpu.toFixed(2)} vCPUs / -${calc.finalLoggingOverhead.totalMemory.toFixed(1)} GB</span></div>
+                <div class="breakdown-item" style="border-top: 2px solid #9c27b0; font-weight: bold;"><span>(=) Available for Workloads</span><span>${((calc.finalWorkerNodes * calc.availableVcpuPerNode) - calc.masterOverhead.cpu - calc.finalLoggingOverhead.totalCpu).toFixed(2)} vCPUs / ${((calc.finalWorkerNodes * calc.availableMemoryPerNode) - calc.masterOverhead.memory - calc.finalLoggingOverhead.totalMemory).toFixed(1)} GB</span></div>
+                <div class="info-note" style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                    <i class="icon-info"></i> Master services consume a fixed ${calc.masterOverhead.cpu} vCPU / ${calc.masterOverhead.memory} GB from total cluster resources.
+                </div>
+            </div>
+            `}
             
             <div class="breakdown-section" style="margin-top: 20px; background: rgba(255,255,255,0.1);">
                 <div class="breakdown-title" style="color: white;">Single Worker Node Profile</div>
                 <div class="breakdown-item"><span>Physical Capacity</span><span>${calc.cpuCores} Cores / ${calc.memoryPerNode} GB RAM</span></div>
                 <div class="breakdown-item"><span>(-) OS/System Reservation</span><span>-${calc.cpuReservation.toFixed(2)} Cores / -${calc.memoryReservation.toFixed(1)} GB RAM</span></div>
-                ${calc.mergeMasters ? `<div class="breakdown-item"><span>(-) Master Services Overhead</span><span>-${calc.masterOverhead.cpu} vCPUs / -${calc.masterOverhead.memory} GB RAM</span></div>` : ''}
                 <div class="breakdown-item"><span>(-) Logging Agent Overhead</span><span>-${calc.finalLoggingOverhead.cpuPerNode.toFixed(2)} vCPUs / -${calc.finalLoggingOverhead.memoryPerNode.toFixed(2)} GB RAM</span></div>
-                <div class="breakdown-item" style="border-top: 2px solid white; font-weight: bold;"><span>(=) Available for Workloads</span><span>${(calc.availableVcpuPerNode + (calc.mergeMasters ? calc.masterOverhead.cpu : 0)).toFixed(2)} vCPUs / ${(calc.availableMemoryPerNode + (calc.mergeMasters ? calc.masterOverhead.memory : 0)).toFixed(1)} GB RAM</span></div>
+                <div class="breakdown-item" style="border-top: 2px solid white; font-weight: bold;"><span>(=) Available for Workloads</span><span>${calc.availableVcpuPerNode.toFixed(2)} vCPUs / ${calc.availableMemoryPerNode.toFixed(1)} GB RAM</span></div>
                 <div class="breakdown-item"><span>(<i class="icon-warning"></i>) Max Utilization Target</span><span>${calc.maxUtilization}%</span></div>
                 <div class="breakdown-item" style="border-top: 2px solid white; font-weight: bold; background: rgba(0,0,0,0.2);"><span>(=) Usable Capacity per Node</span><span>${calc.usableVcpuPerNode.toFixed(2)} vCPUs / ${calc.usableMemoryPerNode.toFixed(1)} GB RAM</span></div>
             </div>
@@ -1233,6 +1346,10 @@ function saveInputsToLocalStorage() {
         capacityMemoryPerNode: document.getElementById('capacityMemoryPerNode').value,
         capacityCustomizeSockets: document.getElementById('capacityCustomizeSockets').checked,
         capacitySocketsPerNode: document.getElementById('capacitySocketsPerNode').value,
+        capacityEnableUtilizationBuffer: document.getElementById('capacityEnableUtilizationBuffer').checked,
+        capacityMaxUtilization: document.getElementById('capacityMaxUtilization').value,
+        capacityMergeMasters: document.getElementById('capacityMergeMasters').checked,
+        capacityLoggingStack: selectedCapacityLoggingStack,
         // The subscription type is shared, but let's read it from its own context
         capacitySubscriptionType: document.querySelector('input[name="capacitySubscriptionType"]:checked').value,
     };
@@ -1316,6 +1433,15 @@ function loadInputsFromLocalStorage() {
             document.getElementById('capacitySocketsPerNode').value = capacity.capacitySocketsPerNode;
             toggleCapacitySocketInput(); // Update visibility
 
+            document.getElementById('capacityEnableUtilizationBuffer').checked = capacity.capacityEnableUtilizationBuffer || false;
+            document.getElementById('capacityMaxUtilization').value = capacity.capacityMaxUtilization || 80;
+            toggleCapacityUtilizationBuffer(); // Update visibility
+            
+            document.getElementById('capacityMergeMasters').checked = capacity.capacityMergeMasters || false;
+
+            const capLogStackOption = document.querySelector(`#capacity-logging-selector div[onclick*="'${capacity.capacityLoggingStack || 'elasticsearch'}'"]`);
+            if (capLogStackOption) selectCapacityLoggingStack(capacity.capacityLoggingStack || 'elasticsearch', capLogStackOption);
+
             const capSubTypeOption = document.querySelector(`#capacity-subscription-type-selector div[onclick*="'${capacity.capacitySubscriptionType}'"]`);
             if (capSubTypeOption) selectSubscriptionType(capacity.capacitySubscriptionType, capSubTypeOption);
         }
@@ -1349,6 +1475,8 @@ function switchMode(mode, element) {
     document.getElementById('exportBtn').style.display = 'none';
     document.getElementById('resourcesExportBtn').style.display = 'none';
     document.getElementById('capacityExportBtn').style.display = 'none';
+    document.getElementById('capacityExcelBtn').style.display = 'none';
+    document.getElementById('capacityTextBtn').style.display = 'none';
     saveInputsToLocalStorage();
 }
 
@@ -1397,6 +1525,10 @@ function resetToDefaults() {
     document.getElementById('capacityCustomizeSockets').checked = false;
     document.getElementById('capacitySocketsPerNode').value = 2;
     toggleCapacitySocketInput();
+    document.getElementById('capacityEnableUtilizationBuffer').checked = false;
+    document.getElementById('capacityMaxUtilization').value = 80;
+    toggleCapacityUtilizationBuffer();
+    selectCapacityLoggingStack('elasticsearch', document.querySelector('#capacity-logging-selector div[onclick*="\'elasticsearch\'"]'));
     selectSubscriptionType('core', document.querySelector('#capacity-subscription-type-selector div[onclick*="\'core\'"]'));
 
     // Reset results
@@ -1411,11 +1543,9 @@ function resetToDefaults() {
     alert('All inputs have been reset to their default values.');
 }
 
-function calculateWorkerNodesNeeded(desiredTotalCpu, desiredTotalMemory, cpuPerNode, memoryPerNode) {
+function calculateWorkerNodesNeeded(desiredTotalCpu, desiredTotalMemory, cpuPerNode, memoryPerNode, maxUtilization = 0.80, loggingStack = 'elasticsearch') {
     // Constants for calculations
     const cpuToVcpuRatio = 2; // Assuming hyperthreading
-    const maxUtilization = 0.80; // Assuming 80% target
-    const loggingStack = 'elasticsearch'; // Default logging stack
     
     // Per-node calculations
     const totalVcpuPerNode = cpuPerNode * cpuToVcpuRatio;
@@ -1480,8 +1610,22 @@ function calculateCapacity() {
         return;
     }
 
+    // Get configuration options
+    const enableUtilizationBuffer = document.getElementById('capacityEnableUtilizationBuffer').checked;
+    const maxUtilization = enableUtilizationBuffer ? 
+        (parseInt(document.getElementById('capacityMaxUtilization').value) / 100) : 1.0;
+    const loggingStack = selectedCapacityLoggingStack;
+    const mergeMasters = document.getElementById('capacityMergeMasters').checked;
+
     // Calculate worker nodes needed
-    const workerNodesNeeded = calculateWorkerNodesNeeded(desiredTotalCpu, desiredTotalMemory, cpuPerNode, memoryPerNode);
+    const workerNodesNeeded = calculateWorkerNodesNeeded(
+        desiredTotalCpu, 
+        desiredTotalMemory, 
+        cpuPerNode, 
+        memoryPerNode, 
+        maxUtilization, 
+        loggingStack
+    );
     
     // Get subscription inputs
     const socketsPerNode = parseInt(document.getElementById('capacitySocketsPerNode').value) || 2;
@@ -1492,22 +1636,41 @@ function calculateCapacity() {
 
     // --- Calculate Actual Usable Resources for the calculated cluster ---
     const cpuToVcpuRatio = 2; // Assuming hyperthreading
-    const maxUtilization = 0.80; // Assuming 80% target
-    const loggingStack = 'elasticsearch'; // Assuming ES
 
     // Per-node calculations
     const totalVcpuPerNode = cpuPerNode * cpuToVcpuRatio;
     const cpuReservation = calculateCpuReservation(cpuPerNode);
     const memoryReservation = calculateMemoryReservation(memoryPerNode);
     
-    const availableVcpuPerNode = totalVcpuPerNode - cpuReservation;
-    const availableMemoryPerNode = memoryPerNode - memoryReservation;
+    let availableVcpuPerNode = totalVcpuPerNode - cpuReservation;
+    let availableMemoryPerNode = memoryPerNode - memoryReservation;
 
-    // Total cluster resources available on workers
+    // Account for master overhead in compact cluster mode
+    let masterOverhead = { cpu: 0, memory: 0 };
+    if (mergeMasters) {
+        const masterReqs = getMasterNodeRequirements(workerNodesNeeded);
+        // In compact mode, master services consume a fixed amount of cluster resources
+        // This is the total resources that would be needed for 3 dedicated masters
+        masterOverhead.cpu = masterReqs.count * masterReqs.cpu; // Total CPU needed for all masters
+        masterOverhead.memory = masterReqs.count * masterReqs.memory; // Total memory needed for all masters
+    }
+
+    // Total cluster resources available on workers (before master overhead)
     let totalAvailableVcpu = workerNodesNeeded * availableVcpuPerNode;
     let totalAvailableMemory = workerNodesNeeded * availableMemoryPerNode;
+    
+    // Subtract master overhead from total cluster resources (not per node)
+    if (mergeMasters) {
+        totalAvailableVcpu -= masterOverhead.cpu;
+        totalAvailableMemory -= masterOverhead.memory;
+    }
 
-    // Subtract logging overhead from the total pool
+    // Calculate infrastructure overhead (services that run on infra nodes)
+    const masterNodes = mergeMasters ? 0 : 3;
+    const currentClusterSize = masterNodes + workerNodesNeeded;
+    const infraReqs = getInfrastructureRequirements(loggingStack, currentClusterSize);
+
+    // Subtract logging per-node overhead from worker nodes
     const loggingOverhead = getLoggingOverhead(loggingStack, workerNodesNeeded);
     totalAvailableVcpu -= loggingOverhead.totalCpu;
     totalAvailableMemory -= loggingOverhead.totalMemory;
@@ -1515,6 +1678,51 @@ function calculateCapacity() {
     // Apply max utilization to get the final usable pool for workloads
     const usableVcpu = totalAvailableVcpu * maxUtilization;
     const usableMemory = totalAvailableMemory * maxUtilization;
+
+    // Calculate overhead breakdown for display
+    const overheadBreakdown = {
+        totalPhysicalCores: workerNodesNeeded * cpuPerNode,
+        totalPhysicalMemory: workerNodesNeeded * memoryPerNode,
+        totalVcpu: workerNodesNeeded * totalVcpuPerNode,
+        systemReservation: {
+            cpu: workerNodesNeeded * cpuReservation,
+            memory: workerNodesNeeded * memoryReservation
+        },
+        masterOverhead: {
+            cpu: mergeMasters ? masterOverhead.cpu : 0,
+            memory: mergeMasters ? masterOverhead.memory : 0
+        },
+        loggingOverhead: {
+            cpu: loggingOverhead.totalCpu,
+            memory: loggingOverhead.totalMemory
+        },
+        infraOverhead: {
+            cpu: infraReqs.totalCpu,
+            memory: infraReqs.totalMemory
+        },
+        utilizationBuffer: enableUtilizationBuffer ? {
+            cpu: totalAvailableVcpu * (1 - maxUtilization),
+            memory: totalAvailableMemory * (1 - maxUtilization)
+        } : { cpu: 0, memory: 0 },
+        totalOverhead: {
+            cpu: (workerNodesNeeded * totalVcpuPerNode) - usableVcpu,
+            memory: (workerNodesNeeded * memoryPerNode) - usableMemory
+        },
+        availableAfterSystemReservation: {
+            cpu: workerNodesNeeded * (totalVcpuPerNode - cpuReservation),
+            memory: workerNodesNeeded * (memoryPerNode - memoryReservation)
+        },
+        availableAfterMasterOverhead: {
+            cpu: totalAvailableVcpu,
+            memory: totalAvailableMemory
+        },
+        availableAfterLogging: {
+            cpu: totalAvailableVcpu,
+            memory: totalAvailableMemory
+        },
+        enableUtilizationBuffer,
+        maxUtilization: maxUtilization * 100
+    };
 
     // --- Calculate Capacity ---
     const containerCapacityByCpu = Math.floor(usableVcpu / containerPreset.vcpu);
@@ -1525,14 +1733,22 @@ function calculateCapacity() {
     const vmCapacityByMem = Math.floor(usableMemory / vmPreset.memory);
     const vmCapacity = Math.min(vmCapacityByCpu, vmCapacityByMem);
 
+    // Calculate master node requirements
+    const masterNodeRequirements = getMasterNodeRequirements(workerNodesNeeded);
+
     const results = {
         desiredTotalCpu,
         desiredTotalMemory,
         cpuPerNode,
         memoryPerNode,
         workerNodesNeeded,
+        masterNodes,
+        masterNodeRequirements,
+        mergeMasters,
         usableVcpu,
         usableMemory,
+        overheadBreakdown,
+        loggingStack,
         containerPreset,
         containerCapacity,
         containerLimitingFactor: containerCapacityByCpu < containerCapacityByMem ? 'vCPU' : 'Memory',
@@ -1567,12 +1783,156 @@ function displayCapacityResults(results) {
                 <span class="result-value">${results.cpuPerNode} Cores / ${results.memoryPerNode} GB RAM</span>
             </div>
             <div class="result-item">
-                <span>Total Usable vCPU (for workloads):</span>
-                <span class="result-value">${results.usableVcpu.toFixed(1)} vCPUs</span>
+                <span>Logging Stack:</span>
+                <span class="result-value">${results.loggingStack === 'elasticsearch' ? 'Elasticsearch' : 'LokiStack'}</span>
             </div>
             <div class="result-item">
-                <span>Total Usable Memory (for workloads):</span>
-                <span class="result-value">${results.usableMemory.toFixed(1)} GB</span>
+                <span>Final Usable Resources (for workloads):</span>
+                <span class="result-value">${results.usableVcpu.toFixed(1)} vCPUs / ${results.usableMemory.toFixed(1)} GB</span>
+            </div>
+        </div>
+
+        <div class="result-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <h3><i class="icon-settings"></i> Cluster Configuration</h3>
+            <div class="result-item">
+                <span>Configuration Type:</span>
+                <span class="result-value">${results.mergeMasters ? 'Compact Cluster' : 'Dedicated Masters'}</span>
+            </div>
+            
+            ${!results.mergeMasters ? `
+            <div class="breakdown-section" style="margin-top: 15px; background: rgba(255,255,255,0.1);">
+                <div class="breakdown-title" style="color: white;"><i class="icon-server"></i> Master Node Recommendations</div>
+                <div class="breakdown-item"><span>Required Master Count:</span><span>${results.masterNodeRequirements.count} nodes (for HA)</span></div>
+                <div class="breakdown-item"><span>CPU per Master:</span><span>${results.masterNodeRequirements.cpu} cores</span></div>
+                <div class="breakdown-item"><span>Memory per Master:</span><span>${results.masterNodeRequirements.memory} GB</span></div>
+                <div class="breakdown-item" style="font-weight: bold; border-top: 1px solid white;"><span>Total Master Resources:</span><span>${results.masterNodeRequirements.totalCpu} cores / ${results.masterNodeRequirements.totalMemory} GB</span></div>
+                <div class="info-note" style="margin-top: 10px; font-size: 0.9em; opacity: 0.8;">
+                    Master sizing based on ${results.workerNodesNeeded} worker nodes
+                    ${results.workerNodesNeeded <= 120 ? '(up to 120 workers: 8c/16GB per master)' : 
+                      results.workerNodesNeeded <= 252 ? '(121-252 workers: 16c/32GB per master)' : 
+                      '(over 252 workers: contact Red Hat for custom sizing)'}
+                </div>
+            </div>
+            ` : `
+            <div class="breakdown-section" style="margin-top: 15px; background: rgba(255,255,255,0.1);">
+                <div class="breakdown-title" style="color: white;"><i class="icon-compress"></i> Compact Cluster Details</div>
+                <div class="breakdown-item"><span>Master Services on Workers:</span><span>Yes</span></div>
+                <div class="breakdown-item"><span>Total Master Overhead:</span><span>${results.overheadBreakdown.masterOverhead.cpu} vCPUs / ${results.overheadBreakdown.masterOverhead.memory} GB (cluster-wide)</span></div>
+                <div class="breakdown-item"><span>Minimum Worker Count:</span><span>3 (for HA master quorum)</span></div>
+                <div class="info-note" style="margin-top: 10px; font-size: 0.9em; opacity: 0.8;">
+                    In compact mode, master services consume a fixed ${results.overheadBreakdown.masterOverhead.cpu} vCPU / ${results.overheadBreakdown.masterOverhead.memory} GB from total cluster resources.
+                </div>
+            </div>
+            `}
+        </div>
+
+        <div class="result-card" style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);">
+            <h3><i class="icon-advanced"></i> Resource Overhead Breakdown</h3>
+            <div class="overhead-summary">
+                <div class="result-item">
+                    <span><strong>🖥️ Total Physical Resources:</strong></span>
+                    <span class="result-value">${results.overheadBreakdown.totalPhysicalCores} Cores / ${results.overheadBreakdown.totalPhysicalMemory} GB</span>
+                </div>
+                <div class="result-item">
+                    <span><strong>⚡ Total vCPU (with hyperthreading):</strong></span>
+                    <span class="result-value">${results.overheadBreakdown.totalVcpu} vCPUs</span>
+                </div>
+            </div>
+            
+            <div class="resource-flow" style="margin-top: 20px;">
+                <div class="flow-step" style="margin: 10px 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 8px; border-left: 4px solid #3498db;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600;">📦 Raw Physical Resources</span>
+                        <span style="font-weight: bold; color: #2c3e50;">${results.overheadBreakdown.totalVcpu} vCPUs / ${results.overheadBreakdown.totalPhysicalMemory} GB</span>
+                    </div>
+                </div>
+                
+                <div class="flow-step" style="margin: 10px 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 8px; border-left: 4px solid #e74c3c;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 600;">➖ System Reservations (kubelet, OS)</span>
+                        <span style="color: #e74c3c; font-weight: bold;">-${results.overheadBreakdown.systemReservation.cpu.toFixed(1)} vCPUs / -${results.overheadBreakdown.systemReservation.memory.toFixed(1)} GB</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9em; color: #555;">
+                        <span>Available after system reservations:</span>
+                        <span style="font-weight: bold;">${results.overheadBreakdown.availableAfterSystemReservation.cpu.toFixed(1)} vCPUs / ${results.overheadBreakdown.availableAfterSystemReservation.memory.toFixed(1)} GB</span>
+                    </div>
+                </div>
+                
+                ${results.mergeMasters && results.overheadBreakdown.masterOverhead.cpu > 0 ? `
+                <div class="flow-step" style="margin: 10px 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 8px; border-left: 4px solid #9c27b0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 600;">➖ Master Services Overhead (compact cluster)</span>
+                        <span style="color: #9c27b0; font-weight: bold;">-${results.overheadBreakdown.masterOverhead.cpu.toFixed(1)} vCPUs / -${results.overheadBreakdown.masterOverhead.memory.toFixed(1)} GB</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9em; color: #555;">
+                        <span>Available after master overhead:</span>
+                        <span style="font-weight: bold;">${results.overheadBreakdown.availableAfterMasterOverhead.cpu.toFixed(1)} vCPUs / ${results.overheadBreakdown.availableAfterMasterOverhead.memory.toFixed(1)} GB</span>
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div class="flow-step" style="margin: 10px 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 8px; border-left: 4px solid #e67e22;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 600;">➖ Logging Agents (per-node overhead)</span>
+                        <span style="color: #e67e22; font-weight: bold;">-${results.overheadBreakdown.loggingOverhead.cpu.toFixed(1)} vCPUs / -${results.overheadBreakdown.loggingOverhead.memory.toFixed(1)} GB</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9em; color: #555;">
+                        <span>Available after logging overhead:</span>
+                        <span style="font-weight: bold;">${results.overheadBreakdown.availableAfterLogging.cpu.toFixed(1)} vCPUs / ${results.overheadBreakdown.availableAfterLogging.memory.toFixed(1)} GB</span>
+                    </div>
+                </div>
+
+                <div class="flow-step" style="margin: 10px 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 8px; border-left: 4px solid #9b59b6;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 600;">🏗️ Cluster Services (runs on infra nodes)</span>
+                        <span style="color: #9b59b6; font-weight: bold;">-${results.overheadBreakdown.infraOverhead.cpu.toFixed(1)} vCPUs / -${results.overheadBreakdown.infraOverhead.memory.toFixed(1)} GB</span>
+                    </div>
+                    <div style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                        <em>Note: These services typically run on dedicated infrastructure nodes, not worker nodes. This shows the total cluster resource requirement.</em>
+                    </div>
+                </div>
+
+                ${results.overheadBreakdown.enableUtilizationBuffer ? `
+                <div class="flow-step" style="margin: 10px 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 8px; border-left: 4px solid #f39c12;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600;">➖ Utilization Buffer (${(100 - results.overheadBreakdown.maxUtilization).toFixed(0)}% safety margin)</span>
+                        <span style="color: #f39c12; font-weight: bold;">-${results.overheadBreakdown.utilizationBuffer.cpu.toFixed(1)} vCPUs / -${results.overheadBreakdown.utilizationBuffer.memory.toFixed(1)} GB</span>
+                    </div>
+                </div>
+                ` : `
+                <div class="flow-step" style="margin: 10px 0; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 8px; border-left: 4px solid #27ae60;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600;">✅ No Utilization Buffer</span>
+                        <span style="color: #27ae60; font-weight: bold;">100% utilization allowed</span>
+                    </div>
+                </div>
+                `}
+                
+                <div class="flow-step" style="margin: 15px 0; padding: 15px; background: linear-gradient(135deg, #27ae60, #2ecc71); border-radius: 8px; color: white;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 1.1em;">
+                        <span style="font-weight: bold;">🎯 Final Usable Resources (for your workloads)</span>
+                        <span style="font-weight: bold; font-size: 1.2em;">${results.usableVcpu.toFixed(1)} vCPUs / ${results.usableMemory.toFixed(1)} GB</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overhead-summary-stats" style="margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.1); border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; margin: 8px 0;">
+                    <span><strong>📊 Total Overhead:</strong></span>
+                    <span style="color: #e74c3c; font-weight: bold;">${results.overheadBreakdown.totalOverhead.cpu.toFixed(1)} vCPUs / ${results.overheadBreakdown.totalOverhead.memory.toFixed(1)} GB</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin: 8px 0;">
+                    <span><strong>📈 Efficiency:</strong></span>
+                    <span style="color: #27ae60; font-weight: bold;">
+                        ${((results.usableVcpu / results.overheadBreakdown.totalVcpu) * 100).toFixed(1)}% CPU / 
+                        ${((results.usableMemory / results.overheadBreakdown.totalPhysicalMemory) * 100).toFixed(1)}% Memory
+                    </span>
+                </div>
+            </div>
+            
+            <div class="warning" style="margin-top: 15px; padding: 10px; text-align: center; background: rgba(52, 152, 219, 0.2); border-radius: 5px;">
+                <i class="icon-chart"></i> <strong>💡 Understanding Resource Flow:</strong><br>
+                This breakdown shows how your physical hardware resources are allocated step-by-step, from raw capacity down to what's actually available for your applications.
             </div>
         </div>
 
@@ -1636,12 +1996,14 @@ function displayCapacityResults(results) {
         </div>
 
         <div class="warning">
-            <i class="icon-chart"></i> <strong>Note:</strong> These are estimates based on a standard OpenShift deployment with dedicated master/infra nodes and typical overhead. For precise calculations, use the Advanced Resource Sizing mode.
+            <i class="icon-chart"></i> <strong>Note:</strong> These are estimates based on a standard OpenShift deployment with dedicated master/infra nodes and typical overhead. Infrastructure services are assumed to run on dedicated infra nodes separate from worker nodes.
         </div>
     `;
 
     resultsContainer.innerHTML = resultsHTML;
     document.getElementById('capacityExportBtn').style.display = 'inline-flex';
+    document.getElementById('capacityExcelBtn').style.display = 'inline-flex';
+    document.getElementById('capacityTextBtn').style.display = 'inline-flex';
 }
 
 function exportCapacityDiagram() {
@@ -1652,47 +2014,581 @@ function exportCapacityDiagram() {
 
     const results = window.lastCapacityResults;
     
-    // Create a simple text-based diagram
-    const diagram = `
-OpenShift Capacity Planning Diagram
-===================================
+    // Create a visual diagram using Canvas
+    createVisualDiagram(results);
+}
 
-Requirements:
-- Desired CPU: ${results.desiredTotalCpu} vCPUs
-- Desired Memory: ${results.desiredTotalMemory} GB
-
-Node Specifications:
-- CPU per Node: ${results.cpuPerNode} cores
-- Memory per Node: ${results.memoryPerNode} GB
-
-Calculated Infrastructure:
-┌─────────────────────────────────────┐
-│           Worker Nodes              │
-│         (${results.workerNodesNeeded} nodes)              │
-├─────────────────────────────────────┤
-│  Node 1: ${results.cpuPerNode} cores / ${results.memoryPerNode} GB RAM    │
-│  Node 2: ${results.cpuPerNode} cores / ${results.memoryPerNode} GB RAM    │
-│  Node 3: ${results.cpuPerNode} cores / ${results.memoryPerNode} GB RAM    │
-${results.workerNodesNeeded > 3 ? `│  ...                                │
-│  Node ${results.workerNodesNeeded}: ${results.cpuPerNode} cores / ${results.memoryPerNode} GB RAM    │` : ''}
-└─────────────────────────────────────┘
-
-Capacity Estimates:
-- Usable Resources: ${results.usableVcpu.toFixed(1)} vCPUs / ${results.usableMemory.toFixed(1)} GB
-- Container Capacity: ~${results.containerCapacity} containers
-- VM Capacity: ~${results.vmCapacity} VMs (if socket-based subscription)
-
-Subscription Requirements:
-- Model: ${results.subscriptionInfo.type}
-- Required Subscriptions: ${results.subscriptionInfo.count}
+function createVisualDiagram(results) {
+    // Create a modal to display the diagram
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+        background: rgba(0,0,0,0.8); z-index: 1000; display: flex; 
+        align-items: center; justify-content: center; padding: 20px;
     `;
     
-    // Create and download the diagram as a text file
-    const blob = new Blob([diagram], { type: 'text/plain' });
+    const content = document.createElement('div');
+    content.style.cssText = `
+        background: white; border-radius: 10px; padding: 20px; 
+        max-width: 90%; max-height: 90%; overflow: auto;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    `;
+    
+    const header = document.createElement('div');
+    header.style.cssText = `
+        display: flex; justify-content: space-between; align-items: center; 
+        margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px;
+    `;
+    header.innerHTML = `
+        <h2 style="margin: 0; color: #333;">OpenShift Cluster Architecture Diagram</h2>
+        <div>
+            <button id="downloadDiagram" style="
+                background: #007bff; color: white; border: none; padding: 8px 16px; 
+                border-radius: 5px; margin-right: 10px; cursor: pointer;
+            ">Download Image</button>
+            <button id="closeDiagram" style="
+                background: #6c757d; color: white; border: none; padding: 8px 16px; 
+                border-radius: 5px; cursor: pointer;
+            ">Close</button>
+        </div>
+    `;
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200;
+    canvas.height = 800;
+    canvas.style.cssText = `border: 1px solid #ddd; border-radius: 5px;`;
+    
+    content.appendChild(header);
+    content.appendChild(canvas);
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+    
+    // Draw the diagram
+    drawClusterArchitectureDiagram(canvas, results);
+    
+    // Event handlers
+    document.getElementById('closeDiagram').onclick = () => {
+        document.body.removeChild(modal);
+    };
+    
+    document.getElementById('downloadDiagram').onclick = () => {
+        const link = document.createElement('a');
+        link.download = `OpenShift_Cluster_Architecture_${new Date().toISOString().split('T')[0]}.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+    };
+    
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            document.body.removeChild(modal);
+        }
+    };
+}
+
+function drawClusterArchitectureDiagram(canvas, results) {
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Clear canvas
+    ctx.fillStyle = '#f0f8ff';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Define colors
+    const colors = {
+        master: '#3498db',
+        worker: '#2ecc71',
+        infra: '#e74c3c',
+        compact: '#9b59b6',
+        text: '#2c3e50',
+        connection: '#95a5a6',
+        background: '#ecf0f1'
+    };
+    
+    // Helper function to draw rounded rectangle
+    function roundRect(x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+    }
+    
+    // Helper function to draw node
+    function drawNode(x, y, width, height, title, specs, color, icon) {
+        // Node background
+        ctx.fillStyle = color;
+        ctx.strokeStyle = '#34495e';
+        ctx.lineWidth = 2;
+        roundRect(x, y, width, height, 10);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Node icon and title
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(icon + ' ' + title, x + width/2, y + 20);
+        
+        // Node specs
+        ctx.font = '11px Arial';
+        ctx.fillText(specs, x + width/2, y + 35);
+        
+        // CPU/Memory details
+        ctx.font = '10px Arial';
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        
+        return { x, y, width, height };
+    }
+    
+    // Helper function to draw connection
+    function drawConnection(fromX, fromY, toX, toY, label = '') {
+        ctx.strokeStyle = colors.connection;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        if (label) {
+            ctx.fillStyle = colors.text;
+            ctx.font = '9px Arial';
+            ctx.textAlign = 'center';
+            const midX = (fromX + toX) / 2;
+            const midY = (fromY + toY) / 2;
+            ctx.fillText(label, midX, midY);
+        }
+    }
+    
+    // Title
+    ctx.fillStyle = colors.text;
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('OpenShift Cluster Architecture', width/2, 30);
+    
+    // Cluster type
+    const clusterType = results.mergeMasters ? 'Compact Cluster' : 'Standard Cluster';
+    ctx.font = '16px Arial';
+    ctx.fillText(`${clusterType} - ${results.workerNodesNeeded} Worker Nodes`, width/2, 55);
+    
+    // Layout parameters
+    const nodeWidth = 120;
+    const nodeHeight = 80;
+    const spacing = 40;
+    const startY = 100;
+    
+    if (results.mergeMasters) {
+        // Compact cluster layout
+        ctx.fillStyle = colors.text;
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('Compact Cluster Configuration:', 50, startY);
+        ctx.font = '12px Arial';
+        ctx.fillText('Master services run on worker nodes (minimum 3 for HA)', 50, startY + 20);
+        
+        // Draw worker nodes (which also act as masters)
+        let nodeY = startY + 50;
+        let nodeX = 50;
+        const nodesPerRow = Math.min(Math.floor((width - 100) / (nodeWidth + spacing)), 6);
+        
+        for (let i = 0; i < results.workerNodesNeeded; i++) {
+            if (i > 0 && i % nodesPerRow === 0) {
+                nodeY += nodeHeight + spacing;
+                nodeX = 50;
+            }
+            
+            const isMaster = i < 3; // First 3 nodes are masters in compact mode
+            const nodeColor = isMaster ? colors.compact : colors.worker;
+            const nodeTitle = isMaster ? `Master+Worker ${i + 1}` : `Worker ${i + 1}`;
+            const nodeSpecs = `${results.cpuPerNode}c / ${results.memoryPerNode}GB`;
+            
+            drawNode(nodeX, nodeY, nodeWidth, nodeHeight, nodeTitle, nodeSpecs, nodeColor, isMaster ? '👑' : '⚙️');
+            
+            // Draw master services indicator on first 3 nodes
+            if (isMaster) {
+                ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                ctx.font = '8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Master Services', nodeX + nodeWidth/2, nodeY + nodeHeight - 5);
+            }
+            
+            nodeX += nodeWidth + spacing;
+        }
+        
+        // Master node recommendations box
+        const masterReqY = nodeY + nodeHeight + 40;
+        ctx.fillStyle = colors.background;
+        ctx.strokeStyle = colors.compact;
+        ctx.lineWidth = 2;
+        roundRect(50, masterReqY, 400, 100, 10);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = colors.text;
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('Compact Cluster Master Requirements:', 70, masterReqY + 20);
+        ctx.font = '11px Arial';
+        ctx.fillText(`• Resource overhead per node: ${results.masterNodeRequirements.cpu} cores / ${results.masterNodeRequirements.memory} GB`, 70, masterReqY + 40);
+        ctx.fillText(`• Minimum 3 nodes required for master HA quorum`, 70, masterReqY + 55);
+        ctx.fillText(`• Master services share resources with workloads`, 70, masterReqY + 70);
+        
+    } else {
+        // Standard cluster layout
+        
+        // Master nodes section
+        ctx.fillStyle = colors.text;
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('Control Plane (Master Nodes):', 50, startY);
+        
+        let masterY = startY + 30;
+        for (let i = 0; i < 3; i++) {
+            const masterX = 50 + (i * (nodeWidth + spacing));
+            const masterSpecs = `${results.masterNodeRequirements.cpu}c / ${results.masterNodeRequirements.memory}GB`;
+            drawNode(masterX, masterY, nodeWidth, nodeHeight, `Master ${i + 1}`, masterSpecs, colors.master, '👑');
+        }
+        
+        // Master specifications box
+        const masterSpecY = masterY + nodeHeight + 20;
+        ctx.fillStyle = colors.background;
+        ctx.strokeStyle = colors.master;
+        ctx.lineWidth = 2;
+        roundRect(50, masterSpecY, 400, 120, 10);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = colors.text;
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('Master Node Recommendations:', 70, masterSpecY + 20);
+        ctx.font = '11px Arial';
+        ctx.fillText(`• Count: ${results.masterNodeRequirements.count} nodes (for HA)`, 70, masterSpecY + 40);
+        ctx.fillText(`• CPU: ${results.masterNodeRequirements.cpu} cores per master`, 70, masterSpecY + 55);
+        ctx.fillText(`• Memory: ${results.masterNodeRequirements.memory} GB per master`, 70, masterSpecY + 70);
+        ctx.fillText(`• Total Resources: ${results.masterNodeRequirements.totalCpu} cores / ${results.masterNodeRequirements.totalMemory} GB`, 70, masterSpecY + 85);
+        ctx.fillText(`• Sizing for ${results.workerNodesNeeded} worker nodes ${results.workerNodesNeeded <= 120 ? '(up to 120)' : '(over 120)'}`, 70, masterSpecY + 100);
+        
+        // Worker nodes section
+        const workerSectionY = masterSpecY + 140;
+        ctx.fillStyle = colors.text;
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(`Worker Nodes (${results.workerNodesNeeded} nodes):`, 50, workerSectionY);
+        
+        let workerY = workerSectionY + 30;
+        let workerX = 50;
+        const workerNodesPerRow = Math.min(Math.floor((width - 100) / (nodeWidth + spacing)), 8);
+        
+        for (let i = 0; i < Math.min(results.workerNodesNeeded, 12); i++) { // Show max 12 nodes
+            if (i > 0 && i % workerNodesPerRow === 0) {
+                workerY += nodeHeight + spacing;
+                workerX = 50;
+            }
+            
+            const workerSpecs = `${results.cpuPerNode}c / ${results.memoryPerNode}GB`;
+            drawNode(workerX, workerY, nodeWidth, nodeHeight, `Worker ${i + 1}`, workerSpecs, colors.worker, '⚙️');
+            
+            workerX += nodeWidth + spacing;
+        }
+        
+        // Show "..." if there are more nodes
+        if (results.workerNodesNeeded > 12) {
+            ctx.fillStyle = colors.text;
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`... and ${results.workerNodesNeeded - 12} more worker nodes`, workerX + 50, workerY + nodeHeight/2);
+        }
+        
+        // Draw connections between masters
+        for (let i = 0; i < 2; i++) {
+            const fromX = 50 + (i * (nodeWidth + spacing)) + nodeWidth;
+            const toX = 50 + ((i + 1) * (nodeWidth + spacing));
+            const connectionY = masterY + nodeHeight/2;
+            drawConnection(fromX, connectionY, toX, connectionY, 'HA');
+        }
+    }
+    
+    // Infrastructure services section
+    const infraY = height - 150;
+    ctx.fillStyle = colors.background;
+    ctx.strokeStyle = colors.infra;
+    ctx.lineWidth = 2;
+    roundRect(50, infraY, width - 100, 100, 10);
+    ctx.fill();
+    ctx.stroke();
+    
+    ctx.fillStyle = colors.text;
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Infrastructure Services:', 70, infraY + 25);
+    ctx.font = '11px Arial';
+    ctx.fillText(`• Logging Backend (${results.loggingStack === 'elasticsearch' ? 'Elasticsearch' : 'LokiStack'}), Monitoring, Registry, Router`, 70, infraY + 45);
+    ctx.fillText(`• Resource Requirements: ${results.overheadBreakdown?.infraOverhead?.cpu?.toFixed(1) || 'N/A'} vCPUs / ${results.overheadBreakdown?.infraOverhead?.memory?.toFixed(1) || 'N/A'} GB`, 70, infraY + 60);
+    ctx.fillText('• These services typically run on dedicated infrastructure nodes', 70, infraY + 75);
+    
+    // Legend
+    const legendY = height - 40;
+    ctx.fillStyle = colors.text;
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Legend:', 50, legendY);
+    ctx.fillText('� Master/Control Plane', 120, legendY);
+    ctx.fillText('⚙️ Worker Node', 250, legendY);
+    if (results.mergeMasters) {
+        ctx.fillText('Purple: Master+Worker (Compact)', 350, legendY);
+    }
+}
+
+function exportCapacityToExcel() {
+    if (!window.lastCapacityResults) {
+        alert('Please calculate capacity first before exporting to Excel');
+        return;
+    }
+
+    const results = window.lastCapacityResults;
+    const wb = XLSX.utils.book_new();
+
+    // Summary Sheet
+    const summaryData = [
+        ['OpenShift Capacity Planning Summary'],
+        ['Generated', new Date().toLocaleString()],
+        [''],
+        ['CLUSTER CONFIGURATION'],
+        ['Worker Nodes Required', results.workerNodesNeeded],
+        ['Master Nodes', results.mergeMasters ? '0 (merged)' : results.masterNodeRequirements.count],
+        ['Cluster Type', results.mergeMasters ? 'Compact Cluster' : 'Standard Cluster'],
+        ['CPU Cores per Worker Node', results.cpuPerNode],
+        ['Memory per Worker Node (GB)', results.memoryPerNode],
+        ['Logging Stack', results.loggingStack === 'elasticsearch' ? 'Elasticsearch' : 'LokiStack'],
+        ['Utilization Buffer', results.overheadBreakdown.enableUtilizationBuffer ? 
+            `Enabled (${(100 - results.overheadBreakdown.maxUtilization).toFixed(0)}% buffer)` : 
+            'Disabled (100% utilization)'],
+        [''],
+        ...(results.mergeMasters ? [
+            ['COMPACT CLUSTER DETAILS'],
+            ['Master Services on Workers', 'Yes'],
+            ['Total Master Overhead (CPU)', results.overheadBreakdown.masterOverhead.cpu.toFixed(2) + ' vCPUs (cluster-wide)'],
+            ['Total Master Overhead (Memory)', results.overheadBreakdown.masterOverhead.memory.toFixed(2) + ' GB (cluster-wide)'],
+            ['Minimum Worker Count for HA', '3 nodes'],
+            ['']
+        ] : [
+            ['MASTER NODE RECOMMENDATIONS'],
+            ['Master Count', results.masterNodeRequirements.count + ' nodes (for HA)'],
+            ['CPU per Master', results.masterNodeRequirements.cpu + ' cores'],
+            ['Memory per Master', results.masterNodeRequirements.memory + ' GB'],
+            ['Total Master Resources', `${results.masterNodeRequirements.totalCpu} cores / ${results.masterNodeRequirements.totalMemory} GB`],
+            ['Master Sizing Basis', `${results.workerNodesNeeded} worker nodes ${results.workerNodesNeeded <= 120 ? '(up to 120)' : results.workerNodesNeeded <= 252 ? '(121-252)' : '(over 252)'}`],
+            ['']
+        ]),
+        ['RESOURCE BREAKDOWN'],
+        ['Total Physical Cores', results.overheadBreakdown.totalPhysicalCores],
+        ['Total Physical Memory (GB)', results.overheadBreakdown.totalPhysicalMemory],
+        ['Total vCPU (with hyperthreading)', results.overheadBreakdown.totalVcpu],
+        [''],
+        ['OVERHEAD ANALYSIS'],
+        ['System Reservations (vCPU)', results.overheadBreakdown.systemReservation.cpu.toFixed(2)],
+        ['System Reservations (GB)', results.overheadBreakdown.systemReservation.memory.toFixed(2)],
+        ...(results.mergeMasters ? [
+            ['Master Services Overhead (vCPU)', results.overheadBreakdown.masterOverhead.cpu.toFixed(2)],
+            ['Master Services Overhead (GB)', results.overheadBreakdown.masterOverhead.memory.toFixed(2)]
+        ] : []),
+        ['Logging Overhead (vCPU)', results.overheadBreakdown.loggingOverhead.cpu.toFixed(2)],
+        ['Logging Overhead (GB)', results.overheadBreakdown.loggingOverhead.memory.toFixed(2)],
+        ['Infrastructure Services (vCPU)', results.overheadBreakdown.infraOverhead.cpu.toFixed(2)],
+        ['Infrastructure Services (GB)', results.overheadBreakdown.infraOverhead.memory.toFixed(2)],
+        ['Utilization Buffer (vCPU)', results.overheadBreakdown.utilizationBuffer.cpu.toFixed(2)],
+        ['Utilization Buffer (GB)', results.overheadBreakdown.utilizationBuffer.memory.toFixed(2)],
+        [''],
+        ['FINAL RESULTS'],
+        ['Usable vCPU for Workloads', results.usableVcpu.toFixed(2)],
+        ['Usable Memory for Workloads (GB)', results.usableMemory.toFixed(2)],
+        ['Container Capacity Estimate', results.containerCapacity],
+        ['VM Capacity Estimate', results.vmCapacity],
+        [''],
+        ['EFFICIENCY'],
+        ['CPU Efficiency (%)', ((results.usableVcpu / results.overheadBreakdown.totalVcpu) * 100).toFixed(1)],
+        ['Memory Efficiency (%)', ((results.usableMemory / results.overheadBreakdown.totalPhysicalMemory) * 100).toFixed(1)],
+        [''],
+        ['SUBSCRIPTION'],
+        ['Model', results.subscriptionInfo.type],
+        ['Required Subscriptions', results.subscriptionInfo.count],
+        ['Calculation Method', results.subscriptionInfo.calculationMethod]
+    ];
+
+    const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+    // Resource Flow Sheet
+    const flowData = [
+        ['Resource Flow Analysis'],
+        ['Step', 'Description', 'vCPU', 'Memory (GB)', 'Running Total vCPU', 'Running Total Memory'],
+        ['1', 'Raw Physical Resources', results.overheadBreakdown.totalVcpu, results.overheadBreakdown.totalPhysicalMemory, results.overheadBreakdown.totalVcpu, results.overheadBreakdown.totalPhysicalMemory],
+        ['2', 'System Reservations', `-${results.overheadBreakdown.systemReservation.cpu.toFixed(2)}`, `-${results.overheadBreakdown.systemReservation.memory.toFixed(2)}`, results.overheadBreakdown.availableAfterSystemReservation.cpu.toFixed(2), results.overheadBreakdown.availableAfterSystemReservation.memory.toFixed(2)],
+        ['3', 'Logging Agents', `-${results.overheadBreakdown.loggingOverhead.cpu.toFixed(2)}`, `-${results.overheadBreakdown.loggingOverhead.memory.toFixed(2)}`, results.overheadBreakdown.availableAfterLogging.cpu.toFixed(2), results.overheadBreakdown.availableAfterLogging.memory.toFixed(2)],
+        ['4', 'Utilization Buffer', `-${results.overheadBreakdown.utilizationBuffer.cpu.toFixed(2)}`, `-${results.overheadBreakdown.utilizationBuffer.memory.toFixed(2)}`, results.usableVcpu.toFixed(2), results.usableMemory.toFixed(2)],
+        ['', '', '', '', '', ''],
+        ['INFRA', 'Cluster Services (separate infra nodes)', results.overheadBreakdown.infraOverhead.cpu.toFixed(2), results.overheadBreakdown.infraOverhead.memory.toFixed(2), 'N/A - Dedicated Nodes', 'N/A - Dedicated Nodes']
+    ];
+
+    const flowWs = XLSX.utils.aoa_to_sheet(flowData);
+    XLSX.utils.book_append_sheet(wb, flowWs, 'Resource Flow');
+
+    // Node Details Sheet
+    const nodeData = [
+        ['Per-Node Analysis'],
+        ['Metric', 'Value'],
+        ['Physical CPU Cores', results.cpuPerNode],
+        ['Total vCPU (with hyperthreading)', results.cpuPerNode * 2],
+        ['Physical Memory (GB)', results.memoryPerNode],
+        ['System CPU Reservation', (results.overheadBreakdown.systemReservation.cpu / results.workerNodesNeeded).toFixed(3)],
+        ['System Memory Reservation (GB)', (results.overheadBreakdown.systemReservation.memory / results.workerNodesNeeded).toFixed(3)],
+        ['Logging CPU Overhead', (results.overheadBreakdown.loggingOverhead.cpu / results.workerNodesNeeded).toFixed(3)],
+        ['Logging Memory Overhead (GB)', (results.overheadBreakdown.loggingOverhead.memory / results.workerNodesNeeded).toFixed(3)],
+        ['Available vCPU per Node', (results.overheadBreakdown.availableAfterLogging.cpu / results.workerNodesNeeded).toFixed(3)],
+        ['Available Memory per Node (GB)', (results.overheadBreakdown.availableAfterLogging.memory / results.workerNodesNeeded).toFixed(3)],
+        ['Usable vCPU per Node', (results.usableVcpu / results.workerNodesNeeded).toFixed(3)],
+        ['Usable Memory per Node (GB)', (results.usableMemory / results.workerNodesNeeded).toFixed(3)]
+    ];
+
+    const nodeWs = XLSX.utils.aoa_to_sheet(nodeData);
+    XLSX.utils.book_append_sheet(wb, nodeWs, 'Per-Node Details');
+
+    // Save file
+    const fileName = `OpenShift_Capacity_Plan_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+}
+
+function exportCapacityTextReport() {
+    if (!window.lastCapacityResults) {
+        alert('Please calculate capacity first before generating report');
+        return;
+    }
+
+    const results = window.lastCapacityResults;
+    
+    // Create comprehensive text report
+    const textReport = `
+OpenShift Capacity Planning Report
+=================================
+Generated: ${new Date().toLocaleString()}
+
+CONFIGURATION SUMMARY
+====================
+Worker Nodes Required: ${results.workerNodesNeeded}
+Master Nodes: ${results.mergeMasters ? '0 (merged with workers)' : results.masterNodeRequirements.count}
+Cluster Configuration: ${results.mergeMasters ? 'Compact Cluster' : 'Standard Cluster'}
+Node Specifications: ${results.cpuPerNode} cores / ${results.memoryPerNode} GB per worker node
+Logging Stack: ${results.loggingStack === 'elasticsearch' ? 'Elasticsearch' : 'LokiStack'}
+Utilization Buffer: ${results.overheadBreakdown.enableUtilizationBuffer ? 
+    `Enabled (${(100 - results.overheadBreakdown.maxUtilization).toFixed(0)}% buffer)` : 
+    'Disabled (100% utilization)'}
+
+${results.mergeMasters ? `
+COMPACT CLUSTER DETAILS
+=======================
+Master Services Location: On worker nodes
+Total Master Services Overhead: ${results.overheadBreakdown.masterOverhead.cpu.toFixed(2)} vCPUs / ${results.overheadBreakdown.masterOverhead.memory.toFixed(2)} GB (cluster-wide)
+Minimum Worker Count: 3 nodes (for master HA quorum)
+Benefits: Reduced infrastructure overhead
+Considerations: Master services consume fixed cluster resources
+` : `
+MASTER NODE RECOMMENDATIONS
+===========================
+Master Count: ${results.masterNodeRequirements.count} nodes (for HA)
+CPU per Master: ${results.masterNodeRequirements.cpu} cores
+Memory per Master: ${results.masterNodeRequirements.memory} GB
+Total Master Resources: ${results.masterNodeRequirements.totalCpu} cores / ${results.masterNodeRequirements.totalMemory} GB
+Sizing Basis: ${results.workerNodesNeeded} worker nodes ${results.workerNodesNeeded <= 120 ? '(up to 120 workers: 8c/16GB per master)' : 
+                                                     results.workerNodesNeeded <= 252 ? '(121-252 workers: 16c/32GB per master)' : 
+                                                     '(over 252 workers: contact Red Hat for custom sizing)'}
+`}
+
+RESOURCE FLOW ANALYSIS
+======================
+Step 1: Raw Physical Resources
+    └─ ${results.overheadBreakdown.totalVcpu} vCPUs / ${results.overheadBreakdown.totalPhysicalMemory} GB
+
+Step 2: System Reservations (OS, kubelet)
+    └─ -${results.overheadBreakdown.systemReservation.cpu.toFixed(1)} vCPUs / -${results.overheadBreakdown.systemReservation.memory.toFixed(1)} GB
+    └─ Available: ${results.overheadBreakdown.availableAfterSystemReservation.cpu.toFixed(1)} vCPUs / ${results.overheadBreakdown.availableAfterSystemReservation.memory.toFixed(1)} GB
+
+${results.mergeMasters && results.overheadBreakdown.masterOverhead.cpu > 0 ? `Step 3: Master Services Overhead (compact cluster)
+    └─ -${results.overheadBreakdown.masterOverhead.cpu.toFixed(1)} vCPUs / -${results.overheadBreakdown.masterOverhead.memory.toFixed(1)} GB (fixed cluster-wide)
+    └─ Available: ${results.overheadBreakdown.availableAfterMasterOverhead.cpu.toFixed(1)} vCPUs / ${results.overheadBreakdown.availableAfterMasterOverhead.memory.toFixed(1)} GB
+
+` : ''}Step ${results.mergeMasters && results.overheadBreakdown.masterOverhead.cpu > 0 ? '4' : '3'}: Logging Agents (per-node overhead)
+    └─ -${results.overheadBreakdown.loggingOverhead.cpu.toFixed(1)} vCPUs / -${results.overheadBreakdown.loggingOverhead.memory.toFixed(1)} GB
+    └─ Available: ${results.overheadBreakdown.availableAfterLogging.cpu.toFixed(1)} vCPUs / ${results.overheadBreakdown.availableAfterLogging.memory.toFixed(1)} GB
+
+${results.overheadBreakdown.enableUtilizationBuffer ? 
+`Step ${results.mergeMasters && results.overheadBreakdown.masterOverhead.cpu > 0 ? '5' : '4'}: Utilization Buffer (${(100 - results.overheadBreakdown.maxUtilization).toFixed(0)}% safety margin)
+    └─ -${results.overheadBreakdown.utilizationBuffer.cpu.toFixed(1)} vCPUs / -${results.overheadBreakdown.utilizationBuffer.memory.toFixed(1)} GB` : 
+`Step ${results.mergeMasters && results.overheadBreakdown.masterOverhead.cpu > 0 ? '5' : '4'}: No Utilization Buffer - 100% utilization allowed`}
+
+FINAL USABLE RESOURCES: ${results.usableVcpu.toFixed(1)} vCPUs / ${results.usableMemory.toFixed(1)} GB
+
+INFRASTRUCTURE SERVICES (Dedicated Nodes)
+=========================================
+Services: Monitoring, Logging Backend, Registry, Router
+Resource Requirement: ${results.overheadBreakdown.infraOverhead.cpu.toFixed(1)} vCPUs / ${results.overheadBreakdown.infraOverhead.memory.toFixed(1)} GB
+Note: These services run on dedicated infrastructure nodes, separate from worker nodes
+
+CAPACITY ESTIMATES
+==================
+Container Workloads:
+└─ Assumed size: ${results.containerPreset.vcpu} vCPU / ${results.containerPreset.memory} GB per container
+└─ Estimated capacity: ~${results.containerCapacity} containers
+└─ Limiting factor: ${results.containerLimitingFactor}
+
+Virtual Machine Workloads:
+└─ Assumed size: ${results.vmPreset.vcpu} vCPU / ${results.vmPreset.memory} GB per VM
+└─ Estimated capacity: ~${results.vmCapacity} VMs
+└─ Limiting factor: ${results.vmLimitingFactor}
+
+EFFICIENCY ANALYSIS
+===================
+Resource Efficiency:
+└─ CPU: ${((results.usableVcpu / results.overheadBreakdown.totalVcpu) * 100).toFixed(1)}% of physical resources usable
+└─ Memory: ${((results.usableMemory / results.overheadBreakdown.totalPhysicalMemory) * 100).toFixed(1)}% of physical resources usable
+
+Total Overhead:
+└─ CPU: ${results.overheadBreakdown.totalOverhead.cpu.toFixed(1)} vCPUs (${((results.overheadBreakdown.totalOverhead.cpu / results.overheadBreakdown.totalVcpu) * 100).toFixed(1)}%)
+└─ Memory: ${results.overheadBreakdown.totalOverhead.memory.toFixed(1)} GB (${((results.overheadBreakdown.totalOverhead.memory / results.overheadBreakdown.totalPhysicalMemory) * 100).toFixed(1)}%)
+
+SUBSCRIPTION REQUIREMENTS
+=========================
+Subscription Model: ${results.subscriptionInfo.type}
+Required Subscriptions: ${results.subscriptionInfo.count}
+Calculation Method: ${results.subscriptionInfo.calculationMethod}
+Total Billable Cores: ${results.subscriptionInfo.totalPhysicalCores}
+${results.subscriptionInfo.totalSockets ? `Total Billable Sockets: ${results.subscriptionInfo.totalSockets}` : ''}
+
+RECOMMENDATIONS
+===============
+1. Plan for ${results.workerNodesNeeded} worker nodes with the specified hardware configuration
+2. Reserve additional infrastructure nodes for cluster services
+3. Monitor actual utilization and adjust capacity as needed
+4. Consider the ${results.overheadBreakdown.enableUtilizationBuffer ? 'configured utilization buffer' : 'lack of utilization buffer'} in your operational planning
+
+Generated by OpenShift Resource Calculator
+==========================================
+    `;
+    
+    // Create and download the report
+    const blob = new Blob([textReport], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `OpenShift_Capacity_Diagram_${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `OpenShift_Capacity_Report_${new Date().toISOString().split('T')[0]}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

@@ -232,6 +232,41 @@
                         <input type="number" id="capacitySocketsPerNode" value="2" min="1" style="display: none; margin-top: 10px;" onchange="saveInputsToLocalStorage()">
                     </div>
 
+                    <h3 style="margin: 30px 0 20px 0; color: #333;"><i class="icon-advanced"></i> Step 3: Advanced Configuration</h3>
+
+                    <!-- Utilization Buffer Configuration -->
+                    <div class="form-group">
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="capacityEnableUtilizationBuffer" onchange="toggleCapacityUtilizationBuffer(); saveInputsToLocalStorage();">
+                            <label for="capacityEnableUtilizationBuffer">Enable Utilization Safety Buffer</label>
+                        </div>
+                        <div id="capacityUtilizationBufferInputs" style="display: none; margin-top: 10px;">
+                            <label for="capacityMaxUtilization">Max Utilization Target (%): <span class="info-tooltip" title="Maximum resource utilization before considering nodes overloaded">?</span></label>
+                            <input type="number" id="capacityMaxUtilization" value="80" min="50" max="95" onchange="saveInputsToLocalStorage()">
+                        </div>
+                    </div>
+
+                    <!-- Logging Stack Selection -->
+                    <div class="form-group">
+                        <label>Choose Logging Stack:</label>
+                        <div class="radio-group" id="capacity-logging-selector">
+                            <div class="radio-option selected" onclick="selectCapacityLoggingStack('elasticsearch', this)">
+                                <input type="radio" id="capacityLogStackEs" name="capacityLoggingStack" value="elasticsearch" checked>
+                                <label for="capacityLogStackEs">
+                                    <h3>Elasticsearch</h3>
+                                    <p>Higher infra resources, lower per-node overhead</p>
+                                </label>
+                            </div>
+                            <div class="radio-option" onclick="selectCapacityLoggingStack('loki', this)">
+                                <input type="radio" id="capacityLogStackLoki" name="capacityLoggingStack" value="loki">
+                                <label for="capacityLogStackLoki">
+                                    <h3>LokiStack</h3>
+                                    <p>Lower infra resources, higher per-node overhead</p>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Subscription Type Selection -->
                     <div class="form-group">
                         <label>OpenShift Subscription Type:</label>
@@ -253,9 +288,22 @@
                         </div>
                     </div>
 
+                    <!-- Cluster Configuration Options -->
+                    <div class="form-group">
+                        <label>Cluster Configuration:</label>
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="capacityMergeMasters" onchange="saveInputsToLocalStorage()">
+                                <label for="capacityMergeMasters">Compact Cluster (Merge Master nodes with Worker nodes)</label>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="btn-container">
                         <button class="calculate-btn" onclick="calculateCapacity()"><i class="icon-calculate"></i> Calculate Worker Nodes & Capacity</button>
-                        <button class="export-btn" onclick="exportCapacityDiagram()" id="capacityExportBtn" style="display: none;"><i class="icon-diagram"></i> Generate Diagram</button>
+                        <button class="export-btn" onclick="exportCapacityToExcel()" id="capacityExcelBtn" style="display: none;"><i class="icon-export"></i> Export to Excel</button>
+                        <button class="export-btn" onclick="exportCapacityTextReport()" id="capacityTextBtn" style="display: none;"><i class="icon-diagram"></i> Export Text Report</button>
+                        <button class="export-btn" onclick="exportCapacityDiagram()" id="capacityExportBtn" style="display: none;"><i class="icon-diagram"></i> View Visual Diagram</button>
                         <button class="reset-btn" onclick="resetToDefaults()" title="Reset all inputs to default values"><i class="icon-reset"></i> Reset</button>
                     </div>
                 </div>
