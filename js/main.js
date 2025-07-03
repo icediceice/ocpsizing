@@ -885,7 +885,8 @@ function calculateResources() {
             const currentMasterReqs = getMasterNodeRequirements(finalWorkerNodes);
             // In compact mode, master services consume a fixed amount of cluster resources
             // This is the total resources that would be needed for 3 dedicated masters
-            masterOverhead.cpu = currentMasterReqs.count * currentMasterReqs.cpu; // Total CPU for all masters
+            // Apply CPU to vCPU ratio (hyperthreading) to convert cores to vCPUs
+            masterOverhead.cpu = currentMasterReqs.count * currentMasterReqs.cpu * cpuToVcpuRatio; // Total vCPUs for all masters
             masterOverhead.memory = currentMasterReqs.count * currentMasterReqs.memory; // Total memory for all masters
         } else {
             masterOverhead.cpu = 0;
@@ -946,7 +947,8 @@ function calculateResources() {
     if (mergeMasters) {
         const finalMasterReqs = getMasterNodeRequirements(finalWorkerNodes);
         // Master overhead is fixed total cluster resources (not per node)
-        masterOverhead.cpu = finalMasterReqs.count * finalMasterReqs.cpu;
+        // Apply CPU to vCPU ratio (hyperthreading) to convert cores to vCPUs
+        masterOverhead.cpu = finalMasterReqs.count * finalMasterReqs.cpu * cpuToVcpuRatio;
         masterOverhead.memory = finalMasterReqs.count * finalMasterReqs.memory;
     }
     
@@ -1651,7 +1653,8 @@ function calculateCapacity() {
         const masterReqs = getMasterNodeRequirements(workerNodesNeeded);
         // In compact mode, master services consume a fixed amount of cluster resources
         // This is the total resources that would be needed for 3 dedicated masters
-        masterOverhead.cpu = masterReqs.count * masterReqs.cpu; // Total CPU needed for all masters
+        // Apply CPU to vCPU ratio (hyperthreading) to convert cores to vCPUs
+        masterOverhead.cpu = masterReqs.count * masterReqs.cpu * cpuToVcpuRatio; // Total vCPUs needed for all masters
         masterOverhead.memory = masterReqs.count * masterReqs.memory; // Total memory needed for all masters
     }
 
