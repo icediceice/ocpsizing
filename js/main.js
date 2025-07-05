@@ -402,9 +402,9 @@ function getMasterNodeRequirements(workerNodeCount = 0) {
     let cpuPerMaster, memoryPerMaster;
     
     if (workerNodeCount <= 120) {
-        // Up to 120 worker nodes: 8 cores / 16GB per master
+        // Up to 120 worker nodes: 8 cores / 32GB per master
         cpuPerMaster = 8;
-        memoryPerMaster = 16;
+        memoryPerMaster = 32;
     } else if (workerNodeCount <= 252) {
         // 121-252 worker nodes: 16 cores / 32GB per master
         cpuPerMaster = 16;
@@ -1076,7 +1076,7 @@ function displayResults(calc) {
                 <div class="breakdown-item" style="font-weight: bold; border-top: 1px solid #4a90e2;"><span>Total Master Resources:</span><span>${calc.masterNodeRequirements.totalCpu} cores / ${calc.masterNodeRequirements.totalMemory} GB</span></div>
                 <div class="info-note" style="margin-top: 10px; font-size: 0.9em; color: #666;">
                     <i class="icon-info"></i> Master sizing based on ${calc.finalWorkerNodes} worker nodes
-                    ${calc.finalWorkerNodes <= 120 ? '(up to 120 workers: 8c/16GB per master)' : 
+                    ${calc.finalWorkerNodes <= 120 ? '(up to 120 workers: 8c/32GB per master)' : 
                       calc.finalWorkerNodes <= 252 ? '(121-252 workers: 16c/32GB per master)' : 
                       '(over 252 workers: contact Red Hat for custom sizing)'}
                 </div>
@@ -1808,7 +1808,7 @@ function displayCapacityResults(results) {
                 <div class="breakdown-item" style="font-weight: bold; border-top: 1px solid white;"><span>Total Master Resources:</span><span>${results.masterNodeRequirements.totalCpu} cores / ${results.masterNodeRequirements.totalMemory} GB</span></div>
                 <div class="info-note" style="margin-top: 10px; font-size: 0.9em; opacity: 0.8;">
                     Master sizing based on ${results.workerNodesNeeded} worker nodes
-                    ${results.workerNodesNeeded <= 120 ? '(up to 120 workers: 8c/16GB per master)' : 
+                    ${results.workerNodesNeeded <= 120 ? '(up to 120 workers: 8c/32GB per master)' : 
                       results.workerNodesNeeded <= 252 ? '(121-252 workers: 16c/32GB per master)' : 
                       '(over 252 workers: contact Red Hat for custom sizing)'}
                 </div>
@@ -2507,7 +2507,7 @@ Master Count: ${results.masterNodeRequirements.count} nodes (for HA)
 CPU per Master: ${results.masterNodeRequirements.cpu} cores
 Memory per Master: ${results.masterNodeRequirements.memory} GB
 Total Master Resources: ${results.masterNodeRequirements.totalCpu} cores / ${results.masterNodeRequirements.totalMemory} GB
-Sizing Basis: ${results.workerNodesNeeded} worker nodes ${results.workerNodesNeeded <= 120 ? '(up to 120 workers: 8c/16GB per master)' : 
+Sizing Basis: ${results.workerNodesNeeded} worker nodes ${results.workerNodesNeeded <= 120 ? '(up to 120 workers: 8c/32GB per master)' : 
                                                      results.workerNodesNeeded <= 252 ? '(121-252 workers: 16c/32GB per master)' : 
                                                      '(over 252 workers: contact Red Hat for custom sizing)'}
 `}
